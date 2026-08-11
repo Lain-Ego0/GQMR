@@ -38,6 +38,14 @@ exclude = [
   "motion_imitation/**",
 ]
 
+[tool.hatch.build.targets.sdist]
+exclude = [
+  "/motion_imitation",
+  "/.deps",
+  "/.venv",
+  "/dist",
+]
+
 [tool.pytest.ini_options]
 addopts = "-ra"
 testpaths = ["tests"]

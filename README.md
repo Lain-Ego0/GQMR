@@ -1,6 +1,8 @@
 # GQMR
 General Quadruped Motion Retargeting
 
+![GQMR GUI](docs/images/gqmr-gui.png)
+
 项目统一使用 MuJoCo 作为运动学、动力学、仿真和渲染后端，不使用 PyBullet。
 
 项目的完整实施路线见 [GQMR 四足快速运动重定向工具实施计划](docs/IMPLEMENTATION_PLAN.md)。
@@ -26,6 +28,8 @@ uv run gqmr export trot.go2.npz --robot unitree-go2 \
   --format isaaclab_amp_v232 --output trot.amp.npz
 uv run gqmr gui
 ```
+
+仓库中的 [`examples/demo`](examples/demo) 包含由 MIT 合成 trot 生成的 AnimalMotion、Go2 RobotMotion、Isaac Lab AMP、DeepMimic JSON、质量报告和 portable `.gqmr` 工程，不包含历史 CC BY-NC 动作。
 
 开发验证：
 

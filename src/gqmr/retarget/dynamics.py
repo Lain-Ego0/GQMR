@@ -43,6 +43,8 @@ def simulate_pd_tracking(
         raise RobotModelError("RobotMotion model hash does not match dynamics robot")
     if motion.dof_names != robot.config.dof_order or not np.all(motion.frame_valid):
         raise RobotModelError("PD replay requires matching DOFs and fully valid frames")
+    if np.any(robot.actuator_ids < 0):
+        raise RobotModelError("PD replay requires one direct actuator per business DOF")
     robot.set_pose(
         motion.root_position[0], motion.root_rotation[0], motion.dof_position[0]
     )

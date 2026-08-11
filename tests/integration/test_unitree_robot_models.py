@@ -8,6 +8,7 @@ import pytest
 
 from gqmr.cli.main import main
 from gqmr.core.coordinates import quaternion_geodesic_distance
+from gqmr.core.derivatives import angular_velocity_world, linear_velocity
 from gqmr.core.io import load_motion, save_motion
 from gqmr.core.motion import RobotMotion, SolverStatus
 from gqmr.exporters import load_isaaclab_amp_v232
@@ -303,6 +304,33 @@ def test_isaaclab_amp_export_fk_roundtrip(tmp_path: Path, robot_id: str) -> None
             )
     assert maximum_position_error < 1e-5
     assert maximum_rotation_error < 1e-5
+    assert np.sqrt(
+        np.mean((clip.dof_velocities - linear_velocity(np.arange(clip.frame_count) / clip.fps, clip.dof_positions)) ** 2)
+    ) < 0.01 * max(float(np.sqrt(np.mean(clip.dof_velocities**2))), 1e-6)
+    assert np.sqrt(
+        np.mean(
+            (
+                clip.body_linear_velocities
+                - linear_velocity(
+                    np.arange(clip.frame_count) / clip.fps, clip.body_positions
+                )
+            )
+            ** 2
+        )
+    ) < 0.01 * max(float(np.sqrt(np.mean(clip.body_linear_velocities**2))), 1e-6)
+    recalculated_angular = np.stack(
+        [
+            angular_velocity_world(
+                np.arange(clip.frame_count) / clip.fps,
+                clip.body_rotations[:, body_index],
+            )
+            for body_index in range(len(clip.body_names))
+        ],
+        axis=1,
+    )
+    assert np.sqrt(np.mean((clip.body_angular_velocities - recalculated_angular) ** 2)) < (
+        0.01 * max(float(np.sqrt(np.mean(clip.body_angular_velocities**2))), 1e-6)
+    )
 
 
 def test_mujoco_stream_protocol_records_canonical_robot_motion() -> None:

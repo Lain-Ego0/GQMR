@@ -147,11 +147,11 @@ class RobotModel:
                 for actuator_id in range(self.model.nu)
                 if int(self.model.actuator_trnid[actuator_id, 0]) == int(joint_id)
             ]
-            if len(matches) != 1:
+            if len(matches) > 1:
                 raise RobotModelError(
-                    f"DOF {name!r} must have exactly one directly bound actuator"
+                    f"DOF {name!r} has multiple directly bound actuators"
                 )
-            actuator_ids.append(matches[0])
+            actuator_ids.append(matches[0] if matches else -1)
         return np.asarray(actuator_ids, dtype=np.int32)
 
     def set_pose(

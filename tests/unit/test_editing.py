@@ -6,7 +6,14 @@ from datetime import datetime, timezone
 import numpy as np
 import pytest
 
-from gqmr.editing import EditStack, apply_edit, make_robot_loop
+from gqmr.editing import (
+    EditStack,
+    apply_edit,
+    concatenate_robot_motions,
+    filter_robot_motion,
+    make_robot_loop,
+)
+from dataclasses import replace
 from gqmr.core.coordinates import quaternion_geodesic_distance
 from test_motion_io import make_robot_motion
 from gqmr.project.model import EditCommand
@@ -93,3 +100,30 @@ def test_robot_loop_closes_rotation_and_dofs() -> None:
     assert np.max(np.abs(loop.dof_position[-1] - loop.dof_position[0])) < 0.03
     assert loop.root_position[-1, 0] == 1.0
     assert np.allclose(loop.root_position[-1, 1:], loop.root_position[0, 1:])
+
+
+def test_filter_and_concatenate_robot_motion() -> None:
+    base = make_robot_motion()
+    timestamps = np.arange(11, dtype=np.float64) * 0.01
+    noise = np.array([(-1.0) ** index for index in range(11)])[:, None] * 0.05
+    motion = replace(
+        base,
+        timestamps=timestamps,
+        root_position=np.zeros((11, 3)),
+        root_rotation=np.tile([1.0, 0.0, 0.0, 0.0], (11, 1)),
+        dof_position=np.tile([0.2, -0.1], (11, 1)) + noise,
+        root_linear_velocity=np.zeros((11, 3)),
+        root_angular_velocity=np.zeros((11, 3)),
+        dof_velocity=np.zeros((11, 2)),
+        foot_contact_probability=np.zeros((11, 4)),
+        frame_valid=np.ones(11, dtype=bool),
+        solver_status=np.zeros(11, dtype=np.int16),
+        solver_residual=np.zeros(11),
+    )
+    filtered = filter_robot_motion(motion, window_frames=5, polynomial_order=2)
+    combined = concatenate_robot_motions([filtered, filtered], blend_seconds=0.03)
+
+    assert np.std(filtered.dof_position[:, 0]) < np.std(motion.dof_position[:, 0])
+    assert combined.frame_count == 21
+    assert np.all(np.diff(combined.timestamps) > 0.0)
+    assert combined.timestamps[-1] == pytest.approx(0.2)

@@ -24,7 +24,7 @@ class HighQualityRetargetConfig:
     contact_threshold: float = 0.5
     residual_tolerance: float = 0.03
     unreachable_residual: float = 0.10
-    minimum_foot_height: float = 0.0
+    minimum_foot_height: float = 0.02
 
     def __post_init__(self) -> None:
         values = (
@@ -41,6 +41,8 @@ class HighQualityRetargetConfig:
             raise ValueError("high-quality configuration values must be positive")
         if not 0.0 <= self.contact_threshold <= 1.0:
             raise ValueError("contact_threshold must be in [0,1]")
+        if not np.isfinite(self.minimum_foot_height) or self.minimum_foot_height < 0.0:
+            raise ValueError("minimum_foot_height must be finite and non-negative")
 
 
 def _contact_locked_targets(
