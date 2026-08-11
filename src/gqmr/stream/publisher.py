@@ -48,12 +48,22 @@ class GQMRPublisher:
         endpoint: str = "tcp://127.0.0.1:5570",
         ring_size: int = 4096,
         context: zmq.Context | None = None,
+        curve_public_key: bytes | None = None,
+        curve_secret_key: bytes | None = None,
     ) -> None:
         if ring_size <= 0:
             raise StreamProtocolError("ring_size must be positive")
+        if (curve_public_key is None) != (curve_secret_key is None):
+            raise StreamProtocolError("CurveZMQ publisher requires both public and secret keys")
+        if curve_public_key is not None and (
+            len(curve_public_key) != 40 or len(curve_secret_key or b"") != 40
+        ):
+            raise StreamProtocolError("CurveZMQ keys must be 40-byte Z85 values")
         if endpoint.startswith("tcp://"):
             host = endpoint[6:].rsplit(":", 1)[0]
-            if host not in {"127.0.0.1", "localhost", "::1"}:
+            if host not in {"127.0.0.1", "localhost", "::1"} and (
+                curve_public_key is None or curve_secret_key is None
+            ):
                 raise StreamProtocolError(
                     "non-loopback publishing requires CurveZMQ configuration"
                 )
@@ -69,6 +79,8 @@ class GQMRPublisher:
         self._context = context or zmq.Context.instance()
         self._thread: threading.Thread | None = None
         self.bound_endpoint: str | None = None
+        self.curve_public_key = curve_public_key
+        self.curve_secret_key = curve_secret_key
 
     def start(self) -> "GQMRPublisher":
         if self._thread is not None:
@@ -119,6 +131,10 @@ class GQMRPublisher:
     def _network_loop(self) -> None:
         socket = self._context.socket(zmq.ROUTER)
         socket.setsockopt(zmq.LINGER, 0)
+        if self.curve_public_key is not None and self.curve_secret_key is not None:
+            socket.curve_publickey = self.curve_public_key
+            socket.curve_secretkey = self.curve_secret_key
+            socket.curve_server = True
         socket.bind(self.endpoint)
         endpoint = socket.getsockopt(zmq.LAST_ENDPOINT).decode("ascii")
         with self._condition:

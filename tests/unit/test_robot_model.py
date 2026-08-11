@@ -3,8 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+import yaml
 
 from gqmr.robots.config import RobotConfig
+from gqmr.robots.external import external_asset_sha256, load_external_robot_model
+from gqmr.robots.importer import inspect_mjcf_candidates
 from gqmr.robots.model import RobotModel
 
 
@@ -108,3 +111,30 @@ def test_business_dof_order_and_foot_jacobian(tmp_path: Path) -> None:
         finite[:, index] = (plus_position - minus_position) / (2 * step)
     relative_error = np.linalg.norm(analytic - finite) / np.linalg.norm(finite)
     assert relative_error < 1e-4
+
+
+def test_mjcf_candidate_inspection_is_read_only(tmp_path: Path) -> None:
+    model_path = tmp_path / "synthetic.xml"
+    model_path.write_text(_synthetic_xml(), encoding="utf-8")
+
+    report = inspect_mjcf_candidates(model_path)
+
+    assert report["free_joint_count"] == 1
+    assert len(report["scalar_joints"]) == 12
+    assert report["notice"].startswith("candidate only")
+
+
+def test_external_robot_loads_only_after_directory_hash_match(tmp_path: Path) -> None:
+    asset_root = tmp_path / "assets"
+    asset_root.mkdir()
+    model_path = asset_root / "scene.xml"
+    model_path.write_text(_synthetic_xml(), encoding="utf-8")
+    document = _synthetic_config().model_dump(mode="json")
+    document["model_sha256"] = external_asset_sha256(asset_root)
+    config_path = tmp_path / "robot.yaml"
+    config_path.write_text(yaml.safe_dump(document, sort_keys=False), encoding="utf-8")
+
+    robot = load_external_robot_model(config_path, asset_root)
+
+    assert robot.model.nq == 19
+    assert robot.config.model_sha256 == external_asset_sha256(asset_root)

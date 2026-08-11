@@ -427,6 +427,7 @@ def test_high_quality_contact_lock_reduces_sliding(gait: str) -> None:
     refined_report = replay_quality_report(refined, robot)
     assert refined_report["valid_frame_ratio"] >= 0.995
     assert refined_report["joint_limit_violation_frames"] == 0
+    assert refined_report["self_collision_frames"] == 0
     assert refined_report["mean_contact_foot_speed_mps"] <= (
         0.5 * fast_report["mean_contact_foot_speed_mps"]
     )

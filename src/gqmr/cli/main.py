@@ -24,7 +24,12 @@ from gqmr.core.errors import GQMRError
 from gqmr.core.io import load_motion, save_motion
 from gqmr.core.motion import AnimalMotion, RobotMotion
 from gqmr.exporters import export_deepmimic_json, export_isaaclab_amp_v232
-from gqmr.editing import apply_edit, make_robot_loop
+from gqmr.editing import (
+    apply_edit,
+    concatenate_robot_motions,
+    filter_robot_motion,
+    make_robot_loop,
+)
 from gqmr.project import (
     add_resource,
     load_project,
@@ -44,13 +49,20 @@ from gqmr.retarget import (
     PDReplayConfig,
     simulate_pd_tracking,
 )
-from gqmr.robots import available_robot_configs, load_robot_model
+from gqmr.robots import (
+    available_robot_configs,
+    external_asset_sha256,
+    inspect_mjcf_candidates,
+    load_external_robot_model,
+    load_robot_model,
+)
 from gqmr.robots.model import RobotModelError
 from gqmr.skeletons import get_skeleton
 from gqmr.sources.files import (
     inspect_legacy_dog27,
     load_deeplabcut_csv,
     load_generic_keypoints_json,
+    load_generic_keypoints_csv,
     load_generic_keypoints_npz,
     load_legacy_dog27,
     load_sleap_csv,
@@ -211,6 +223,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     robot_inspect.add_argument("robot", choices=available_robot_configs())
     robot_inspect.add_argument("--cache-dir", type=Path)
+    robot_suggest = robot_commands.add_parser(
+        "suggest", help="inspect an arbitrary MJCF and suggest a v1 config"
+    )
+    robot_suggest.add_argument("path", type=Path)
+    robot_hash = robot_commands.add_parser(
+        "hash-assets", help="hash a user-supplied MJCF asset directory"
+    )
+    robot_hash.add_argument("asset_root", type=Path)
+    robot_external = robot_commands.add_parser(
+        "inspect-config", help="load a user robot config against a hashed asset root"
+    )
+    robot_external.add_argument("config", type=Path)
+    robot_external.add_argument("asset_root", type=Path)
     stream_parser = subparsers.add_parser("stream", help="record MuJoCo Stream Protocol v1")
     stream_commands = stream_parser.add_subparsers(dest="stream_command", required=True)
     stream_record = stream_commands.add_parser("record", help="record qpos/qvel to RobotMotion")
@@ -219,6 +244,9 @@ def build_parser() -> argparse.ArgumentParser:
     stream_record.add_argument("--cache-dir", type=Path)
     stream_record.add_argument("--frames", type=int, required=True)
     stream_record.add_argument("--timeout-ms", type=int, default=10000)
+    stream_record.add_argument("--curve-server-key")
+    stream_record.add_argument("--curve-public-key")
+    stream_record.add_argument("--curve-secret-key")
     stream_record.add_argument("--output", type=Path, required=True)
     project_parser = subparsers.add_parser("project", help="manage .gqmr projects")
     project_commands = project_parser.add_subparsers(
@@ -241,13 +269,21 @@ def build_parser() -> argparse.ArgumentParser:
     pose_inspect.add_argument("path", type=Path)
     pose_inspect.add_argument(
         "--format",
-        choices=("generic-json", "generic-npz", "deeplabcut-csv", "sleap-csv"),
+        choices=(
+            "generic-json",
+            "generic-npz",
+            "generic-csv",
+            "deeplabcut-csv",
+            "sleap-csv",
+        ),
         required=True,
     )
     pose_inspect.add_argument("--fps", type=float, default=60.0)
     pose_convert = pose_commands.add_parser("convert", help="convert calibrated 3D results to AnimalMotion")
     pose_convert.add_argument("path", type=Path)
-    pose_convert.add_argument("--format", choices=("generic-json", "generic-npz"), required=True)
+    pose_convert.add_argument(
+        "--format", choices=("generic-json", "generic-npz", "generic-csv"), required=True
+    )
     pose_convert.add_argument("--instance")
     pose_convert.add_argument("--output", type=Path, required=True)
     pose_triangulate = pose_commands.add_parser("triangulate", help="triangulate synchronized generic 2D views")
@@ -256,7 +292,15 @@ def build_parser() -> argparse.ArgumentParser:
     pose_triangulate.add_argument("--output", type=Path, required=True)
     edit_parser = subparsers.add_parser("edit", help="apply immutable motion edits")
     edit_commands = edit_parser.add_subparsers(dest="edit_command", required=True)
-    for command_name in ("trim", "time-scale", "root-transform", "contact", "resample", "loop"):
+    for command_name in (
+        "trim",
+        "time-scale",
+        "root-transform",
+        "contact",
+        "resample",
+        "loop",
+        "filter",
+    ):
         command_parser = edit_commands.add_parser(command_name)
         command_parser.add_argument("path", type=Path)
         command_parser.add_argument("--output", type=Path, required=True)
@@ -277,6 +321,13 @@ def build_parser() -> argparse.ArgumentParser:
             command_parser.add_argument("--fps", type=int, required=True)
         elif command_name == "loop":
             command_parser.add_argument("--close-forward", action="store_true")
+        elif command_name == "filter":
+            command_parser.add_argument("--window-frames", type=int, default=9)
+            command_parser.add_argument("--polynomial-order", type=int, default=3)
+    splice_parser = edit_commands.add_parser("splice")
+    splice_parser.add_argument("paths", type=Path, nargs="+")
+    splice_parser.add_argument("--blend-seconds", type=float, default=0.15)
+    splice_parser.add_argument("--output", type=Path, required=True)
     return parser
 
 
@@ -308,6 +359,25 @@ def _run_assets(args: argparse.Namespace) -> tuple[dict[str, object], int]:
 
 
 def _run_robots(args: argparse.Namespace) -> dict[str, object]:
+    if args.robot_command == "suggest":
+        return inspect_mjcf_candidates(args.path)
+    if args.robot_command == "hash-assets":
+        return {
+            "asset_root": str(args.asset_root),
+            "model_sha256": external_asset_sha256(args.asset_root),
+        }
+    if args.robot_command == "inspect-config":
+        robot = load_external_robot_model(args.config, args.asset_root)
+        return {
+            "robot_id": robot.config.id,
+            "robot_config_sha256": robot.config.sha256,
+            "model_sha256": robot.config.model_sha256,
+            "nq": robot.model.nq,
+            "nv": robot.model.nv,
+            "nu": robot.model.nu,
+            "dof_order": list(robot.config.dof_order),
+            "joint_ranges": robot.joint_ranges.tolist(),
+        }
     robot = load_robot_model(args.robot, cache_dir=args.cache_dir)
     return {
         "robot_id": robot.config.id,
@@ -456,7 +526,7 @@ def _project_summary(path: Path, project) -> dict[str, object]:
             resource.embedded for resource in project.resources.values()
         ),
         "active_animal_motion": project.active_animal_motion,
-        "active_robot_motion": project.active_robot_motion,
+        "active_robot_motion": project.retarget.get("active_robot_motion"),
         "edits": len(project.edits),
     }
 
@@ -481,7 +551,18 @@ def _run_project(args: argparse.Namespace) -> dict[str, object]:
 
 def _run_stream(args: argparse.Namespace) -> dict[str, object]:
     robot = load_robot_model(args.robot, cache_dir=args.cache_dir)
-    recorder = GQMRRecorder(args.endpoint)
+    recorder = GQMRRecorder(
+        args.endpoint,
+        curve_server_key=(
+            args.curve_server_key.encode("ascii") if args.curve_server_key else None
+        ),
+        curve_public_key=(
+            args.curve_public_key.encode("ascii") if args.curve_public_key else None
+        ),
+        curve_secret_key=(
+            args.curve_secret_key.encode("ascii") if args.curve_secret_key else None
+        ),
+    )
     try:
         recorder.connect(timeout_ms=args.timeout_ms)
         recorder.validate_robot(robot)
@@ -506,6 +587,8 @@ def _load_pose_file(path: Path, format_name: str, fps: float = 60.0):
         return load_generic_keypoints_json(path)
     if format_name == "generic-npz":
         return load_generic_keypoints_npz(path)
+    if format_name == "generic-csv":
+        return load_generic_keypoints_csv(path)
     if format_name == "deeplabcut-csv":
         return load_deeplabcut_csv(path, fps=fps)
     return load_sleap_csv(path, fps=fps)
@@ -556,12 +639,36 @@ def _run_pose(args: argparse.Namespace) -> dict[str, object]:
 
 
 def _run_edit(args: argparse.Namespace) -> dict[str, object]:
+    if args.edit_command == "splice":
+        motions = [load_motion(path) for path in args.paths]
+        if not all(isinstance(item, RobotMotion) for item in motions):
+            raise RobotModelError("splice requires RobotMotion inputs")
+        edited = concatenate_robot_motions(
+            motions, blend_seconds=args.blend_seconds
+        )
+        save_motion(args.output, edited)
+        return {
+            "input": [str(path) for path in args.paths],
+            "output": str(args.output),
+            "edit": args.edit_command,
+            "schema_id": edited.schema_id,
+            "frames": edited.frame_count,
+            "duration_seconds": edited.duration,
+        }
     motion = load_motion(args.path)
     if args.edit_command == "loop":
         if not isinstance(motion, RobotMotion):
             raise RobotModelError("loop closure requires RobotMotion")
         edited = make_robot_loop(
             motion, preserve_forward_displacement=not args.close_forward
+        )
+    elif args.edit_command == "filter":
+        if not isinstance(motion, RobotMotion):
+            raise RobotModelError("filter requires RobotMotion")
+        edited = filter_robot_motion(
+            motion,
+            window_frames=args.window_frames,
+            polynomial_order=args.polynomial_order,
         )
     else:
         if args.edit_command == "trim":

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import sys
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 from PySide6.QtCore import QThreadPool, QTimer, Qt
@@ -18,6 +20,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMainWindow,
+    QInputDialog,
     QMessageBox,
     QPushButton,
     QSlider,
@@ -31,8 +34,17 @@ from PySide6.QtWidgets import (
 from gqmr import __version__
 from gqmr.core.io import load_motion, save_motion
 from gqmr.core.motion import AnimalMotion, RobotMotion
+from gqmr.editing import EditStack, filter_robot_motion, make_robot_loop
 from gqmr.exporters import export_deepmimic_json, export_isaaclab_amp_v232
-from gqmr.project import add_resource, load_project, new_project, pack_project, save_project
+from gqmr.project import (
+    add_resource,
+    load_project,
+    materialize_resource,
+    new_project,
+    pack_project,
+    save_project,
+)
+from gqmr.project.model import EditCommand
 from gqmr.retarget import replay_quality_report, retarget_fast, retarget_high_quality
 from gqmr.robots import load_robot_model
 from gqmr.sources.files import load_legacy_dog27
@@ -56,6 +68,8 @@ class MainWindow(QMainWindow):
         self.project = new_project()
         self.project_path: Path | None = None
         self.play_timer = QTimer(self)
+        self.edit_stack: EditStack | None = None
+        self.edit_target = "animal"
         self.play_timer.timeout.connect(self._advance_frame)
         self._build_ui()
         self._build_menu()
@@ -172,6 +186,36 @@ class MainWindow(QMainWindow):
             action = QAction(label, self)
             action.triggered.connect(callback)
             menu.addAction(action)
+        edit_menu = self.menuBar().addMenu("编辑")
+        edit_actions = [
+            ("撤销", self.undo_edit),
+            ("重做", self.redo_edit),
+            ("裁剪时间范围…", self.trim_dialog),
+            ("变速…", self.time_scale_dialog),
+            ("重采样…", self.resample_dialog),
+            ("机器人平滑滤波…", self.filter_dialog),
+            ("机器人循环闭合", self.loop_current_robot),
+        ]
+        for label, callback in edit_actions:
+            action = QAction(label, self)
+            action.triggered.connect(callback)
+            edit_menu.addAction(action)
+        help_menu = self.menuBar().addMenu("帮助")
+        about = QAction("关于 GQMR", self)
+        about.triggered.connect(self.show_about)
+        help_menu.addAction(about)
+
+    def show_about(self) -> None:
+        QMessageBox.about(
+            self,
+            "关于 GQMR",
+            f"GQMR {__version__}\n\n"
+            "General Quadruped Motion Retargeting\n"
+            "GQMR: MIT License\n"
+            "PySide6 / Qt / shiboken6: LGPL-3.0 (dynamic libraries)\n"
+            "MuJoCo: Apache-2.0; Unitree assets: BSD-3-Clause\n\n"
+            "完整第三方说明见 docs/THIRD_PARTY_LICENSES.md",
+        )
 
     def _apply_style(self) -> None:
         self.setStyleSheet(
@@ -213,6 +257,8 @@ class MainWindow(QMainWindow):
         self.robot_motion = None
         self.robot_path = None
         self.diagnostics = None
+        self.edit_stack = EditStack(motion)
+        self.edit_target = "animal"
         self.source_label.setText(
             f"{path or motion.metadata['source'].get('gait', 'memory')}\n{motion.frame_count} 帧 / {motion.duration:.3f} s"
         )
@@ -284,6 +330,8 @@ class MainWindow(QMainWindow):
             robot, motion, diagnostics = result
             self.robot_motion = motion
             self.diagnostics = diagnostics
+            self.edit_stack = EditStack(motion)
+            self.edit_target = "robot"
             self.preview.set_motion(self.animal_motion, motion, diagnostics)
             self.frame_slider.setRange(0, motion.frame_count - 1)
             self._log(replay_quality_report(motion, robot))
@@ -329,6 +377,113 @@ class MainWindow(QMainWindow):
 
         self._run_task(work, self._log)
 
+    def _edit_command(self, kind: str, parameters: dict) -> EditCommand:
+        return EditCommand(
+            command_id=str(uuid.uuid4()),
+            kind=kind,
+            resource_id=str(uuid.uuid4()),
+            parameters=parameters,
+            created_at=datetime.now(timezone.utc).isoformat(),
+        )
+
+    def _show_edited_motion(self, motion) -> None:
+        if isinstance(motion, AnimalMotion):
+            self.animal_motion = motion
+            self.robot_motion = None
+            self.diagnostics = None
+            self.edit_target = "animal"
+            self.preview.set_motion(motion)
+        else:
+            self.robot_motion = motion
+            self.edit_target = "robot"
+            self.diagnostics = None
+            self.preview.set_motion(self.animal_motion, motion, self.diagnostics)
+        self.frame_slider.setRange(0, motion.frame_count - 1)
+        self.set_frame(min(self.frame_slider.value(), motion.frame_count - 1))
+        self._log(
+            {
+                "edited": self.edit_target,
+                "frames": motion.frame_count,
+                "duration_seconds": motion.duration,
+                "history": motion.metadata.get("edit_history", []),
+            }
+        )
+        self._update_enabled()
+
+    def undo_edit(self) -> None:
+        if self.edit_stack is not None:
+            self._show_edited_motion(self.edit_stack.undo())
+
+    def redo_edit(self) -> None:
+        if self.edit_stack is not None:
+            self._show_edited_motion(self.edit_stack.redo())
+
+    def trim_dialog(self) -> None:
+        if self.edit_stack is None:
+            return
+        current = self.edit_stack.current()
+        start, ok = QInputDialog.getDouble(
+            self, "裁剪", "开始时间 (s)", 0.0, 0.0, current.duration, 4
+        )
+        if not ok:
+            return
+        end, ok = QInputDialog.getDouble(
+            self, "裁剪", "结束时间 (s)", current.duration, start, current.duration, 4
+        )
+        if ok:
+            self._show_edited_motion(
+                self.edit_stack.push(
+                    self._edit_command("trim", {"start": start, "end": end})
+                )
+            )
+
+    def time_scale_dialog(self) -> None:
+        if self.edit_stack is None:
+            return
+        speed, ok = QInputDialog.getDouble(
+            self, "变速", "速度倍率", 1.0, 0.01, 20.0, 3
+        )
+        if ok:
+            self._show_edited_motion(
+                self.edit_stack.push(
+                    self._edit_command("time_scale", {"speed": speed})
+                )
+            )
+
+    def resample_dialog(self) -> None:
+        if self.edit_stack is None:
+            return
+        fps, ok = QInputDialog.getInt(self, "重采样", "FPS", 60, 1, 1000)
+        if ok:
+            self._show_edited_motion(
+                self.edit_stack.push(self._edit_command("resample", {"fps": fps}))
+            )
+
+    def filter_dialog(self) -> None:
+        if self.robot_motion is None:
+            return
+        window, ok = QInputDialog.getInt(
+            self, "平滑滤波", "奇数窗口帧数", 9, 3, self.robot_motion.frame_count, 2
+        )
+        if not ok:
+            return
+        try:
+            filtered = filter_robot_motion(self.robot_motion, window_frames=window)
+            self.edit_stack = EditStack(filtered)
+            self._show_edited_motion(filtered)
+        except Exception as error:
+            QMessageBox.critical(self, "滤波失败", str(error))
+
+    def loop_current_robot(self) -> None:
+        if self.robot_motion is None:
+            return
+        try:
+            loop = make_robot_loop(self.robot_motion)
+            self.edit_stack = EditStack(loop)
+            self._show_edited_motion(loop)
+        except Exception as error:
+            QMessageBox.critical(self, "循环闭合失败", str(error))
+
     def toggle_playback(self) -> None:
         if self.play_timer.isActive():
             self.play_timer.stop()
@@ -360,11 +515,26 @@ class MainWindow(QMainWindow):
             self.project_path = Path(filename)
             active = self.project.active_animal_motion
             if active is not None:
-                resource = self.project.resources[active]
-                if not resource.embedded:
-                    motion = load_motion(resource.uri)
-                    if isinstance(motion, AnimalMotion):
-                        self.set_animal_motion(motion, Path(resource.uri))
+                resource_path = materialize_resource(
+                    filename, self.project, active
+                )
+                motion = load_motion(resource_path)
+                if isinstance(motion, AnimalMotion):
+                    self.set_animal_motion(motion, resource_path)
+            active_robot = self.project.retarget.get("active_robot_motion")
+            if active_robot is not None:
+                resource_path = materialize_resource(
+                    filename, self.project, active_robot
+                )
+                motion = load_motion(resource_path)
+                if isinstance(motion, RobotMotion):
+                    self.robot_motion = motion
+                    self.robot_path = resource_path
+                    self.edit_stack = EditStack(motion)
+                    self.edit_target = "robot"
+                    self.preview.set_motion(self.animal_motion, motion)
+                    self.frame_slider.setRange(0, motion.frame_count - 1)
+                    self._update_enabled()
             self._log({"opened_project": filename, "resources": len(self.project.resources)})
         except Exception as error:
             QMessageBox.critical(self, "打开失败", str(error))

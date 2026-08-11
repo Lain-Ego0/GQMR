@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import shutil
 import tempfile
@@ -11,8 +12,10 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from pydantic import ValidationError
+from platformdirs import user_cache_path
 
 from gqmr.project.model import ProjectDocument, ProjectError, ProjectResource, _utc_now
+from gqmr.core.json import StrictJSONError, loads_strict_json
 
 _BASE_MEMBERS = {"project.json", "edits.json"}
 _MAX_MEMBERS = 4096
@@ -142,10 +145,15 @@ def load_project(path: str | Path) -> ProjectDocument:
                 total += member.file_size
                 if total > _MAX_TOTAL_SIZE:
                     raise ProjectError("project archive exceeds the size limit")
+                if (
+                    member.file_size > 1024 * 1024
+                    and member.file_size > max(member.compress_size, 1) * 10_000
+                ):
+                    raise ProjectError("project member compression ratio exceeds the limit")
             if any(archive.getinfo(name).file_size > _MAX_METADATA_SIZE for name in _BASE_MEMBERS):
                 raise ProjectError("project metadata exceeds the size limit")
-            project_raw = json.loads(archive.read("project.json"))
-            edits_raw = json.loads(archive.read("edits.json"))
+            project_raw = loads_strict_json(archive.read("project.json").decode("utf-8"))
+            edits_raw = loads_strict_json(archive.read("edits.json").decode("utf-8"))
             if not isinstance(project_raw, dict) or not isinstance(edits_raw, list):
                 raise ProjectError("project.json/edits.json have invalid top-level types")
             project_raw["edits"] = edits_raw
@@ -158,8 +166,90 @@ def load_project(path: str | Path) -> ProjectDocument:
             missing = expected_embedded - set(names)
             if missing:
                 raise ProjectError(f"project is missing embedded resources: {sorted(missing)}")
+            for resource in project.resources.values():
+                if not resource.embedded:
+                    continue
+                member = archive.getinfo(resource.uri)
+                if member.file_size != resource.size:
+                    raise ProjectError(
+                        f"embedded resource size mismatch: {resource.uri}"
+                    )
+                digest = hashlib.sha256()
+                with archive.open(member) as stream:
+                    while chunk := stream.read(1024 * 1024):
+                        digest.update(chunk)
+                if digest.hexdigest() != resource.sha256:
+                    raise ProjectError(
+                        f"embedded resource hash mismatch: {resource.uri}"
+                    )
             return project
-    except (OSError, zipfile.BadZipFile, json.JSONDecodeError, ValidationError) as error:
+    except (
+        OSError,
+        UnicodeError,
+        zipfile.BadZipFile,
+        json.JSONDecodeError,
+        StrictJSONError,
+        ValidationError,
+    ) as error:
         if isinstance(error, ProjectError):
             raise
         raise ProjectError(f"cannot load project {source}: {error}") from error
+
+
+def materialize_resource(
+    project_path: str | Path,
+    project: ProjectDocument,
+    resource_id: str,
+    *,
+    cache_dir: str | Path | None = None,
+) -> Path:
+    try:
+        resource = project.resources[resource_id]
+    except KeyError as error:
+        raise ProjectError(f"unknown project resource {resource_id}") from error
+    if not resource.embedded:
+        path = Path(resource.uri)
+        if not path.is_file() or path.stat().st_size != resource.size:
+            raise ProjectError(f"external project resource is missing or changed: {path}")
+        digest = hashlib.sha256()
+        with path.open("rb") as stream:
+            while chunk := stream.read(1024 * 1024):
+                digest.update(chunk)
+        if digest.hexdigest() != resource.sha256:
+            raise ProjectError(f"external project resource hash changed: {path}")
+        return path
+    root = (
+        Path(cache_dir)
+        if cache_dir is not None
+        else user_cache_path("gqmr") / "projects"
+    )
+    destination = root / resource.sha256 / Path(resource.uri).name
+    if destination.is_file() and destination.stat().st_size == resource.size:
+        return destination
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{destination.name}.", suffix=".tmp", dir=destination.parent
+    )
+    try:
+        digest = hashlib.sha256()
+        with zipfile.ZipFile(project_path) as archive, archive.open(resource.uri) as source:
+            with os.fdopen(descriptor, "wb") as output:
+                while chunk := source.read(1024 * 1024):
+                    digest.update(chunk)
+                    output.write(chunk)
+                output.flush()
+                os.fsync(output.fileno())
+        if digest.hexdigest() != resource.sha256:
+            raise ProjectError("embedded resource changed while materializing")
+        os.replace(temporary_name, destination)
+        return destination
+    except BaseException:
+        try:
+            os.close(descriptor)
+        except OSError:
+            pass
+        try:
+            os.unlink(temporary_name)
+        except FileNotFoundError:
+            pass
+        raise

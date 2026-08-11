@@ -104,7 +104,6 @@ class ProjectDocument(BaseModel):
     gqmr_version: str
     resources: dict[str, ProjectResource] = Field(default_factory=dict)
     active_animal_motion: str | None = None
-    active_robot_motion: str | None = None
     robot: dict[str, Any] = Field(default_factory=dict)
     mapping: dict[str, Any] = Field(default_factory=dict)
     retarget: dict[str, Any] = Field(default_factory=dict)
@@ -138,7 +137,10 @@ class ProjectDocument(BaseModel):
         for key, resource in self.resources.items():
             if key != resource.resource_id:
                 raise ValueError("resource mapping key must equal resource_id")
-        for field in (self.active_animal_motion, self.active_robot_motion):
+        for field in (
+            self.active_animal_motion,
+            self.retarget.get("active_robot_motion"),
+        ):
             if field is not None and field not in self.resources:
                 raise ValueError("active motion references an unknown resource")
         if any(edit.resource_id not in self.resources for edit in self.edits):
@@ -197,5 +199,7 @@ def add_resource(
     if make_active == "animal":
         update["active_animal_motion"] = resource_id
     elif make_active == "robot":
-        update["active_robot_motion"] = resource_id
+        retarget = dict(project.retarget)
+        retarget["active_robot_motion"] = resource_id
+        update["retarget"] = retarget
     return project.model_copy(update=update)

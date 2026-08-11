@@ -131,7 +131,15 @@ class GQMRRecorder:
         requested_fields: tuple[str, ...] = ("qpos", "qvel"),
         credit: int = 256,
         context: zmq.Context | None = None,
+        curve_server_key: bytes | None = None,
+        curve_public_key: bytes | None = None,
+        curve_secret_key: bytes | None = None,
     ) -> None:
+        if (curve_public_key is None) != (curve_secret_key is None):
+            raise StreamProtocolError("CurveZMQ client requires both public and secret keys")
+        for key in (curve_server_key, curve_public_key, curve_secret_key):
+            if key is not None and len(key) != 40:
+                raise StreamProtocolError("CurveZMQ keys must be 40-byte Z85 values")
         self.endpoint = endpoint
         self.requested_fields = requested_fields
         self.credit = credit
@@ -142,6 +150,9 @@ class GQMRRecorder:
         self._gaps: list[dict[str, Any]] = []
         self._last_seq = -1
         self._unacked = 0
+        self.curve_server_key = curve_server_key
+        self.curve_public_key = curve_public_key
+        self.curve_secret_key = curve_secret_key
 
     @property
     def gaps(self) -> tuple[dict[str, Any], ...]:
@@ -151,6 +162,14 @@ class GQMRRecorder:
         socket = self._context.socket(zmq.DEALER)
         socket.setsockopt(zmq.LINGER, 0)
         socket.setsockopt(zmq.IDENTITY, str(uuid.uuid4()).encode("ascii"))
+        if self.curve_server_key is not None:
+            public = self.curve_public_key
+            secret = self.curve_secret_key
+            if public is None or secret is None:
+                public, secret = zmq.curve_keypair()
+            socket.curve_serverkey = self.curve_server_key
+            socket.curve_publickey = public
+            socket.curve_secretkey = secret
         socket.connect(self.endpoint)
         socket.send_multipart(
             encode_header(

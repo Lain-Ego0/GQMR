@@ -9,6 +9,7 @@ from gqmr.pose.triangulation import triangulate_keypoints
 from gqmr.sources.files import (
     load_deeplabcut_csv,
     load_generic_keypoints_json,
+    load_generic_keypoints_csv,
     load_sleap_csv,
     load_generic_keypoints_npz,
     save_generic_keypoints_npz,
@@ -86,3 +87,18 @@ def test_sleap_long_csv_reader_preserves_tracks(tmp_path: Path) -> None:
     restored = load_generic_keypoints_npz(destination)
     assert restored.instance_ids == batch.instance_ids
     assert np.array_equal(restored.positions, batch.positions, equal_nan=True)
+
+
+def test_generic_long_csv_3d_reader(tmp_path: Path) -> None:
+    source = tmp_path / "points.csv"
+    source.write_text(
+        "timestamp,instance,keypoint,x,y,z,confidence\n"
+        "0.0,dog,pelvis,1,2,3,1.0\n"
+        "0.1,dog,pelvis,2,3,4,0.9\n",
+        encoding="utf-8",
+    )
+    batch = load_generic_keypoints_csv(source)
+
+    assert batch.dimensions == 3
+    assert batch.coordinate_frame == "gqmr_world_x_forward_y_left_z_up"
+    assert batch.positions[:, 0, 0].tolist() == [[1.0, 2.0, 3.0], [2.0, 3.0, 4.0]]

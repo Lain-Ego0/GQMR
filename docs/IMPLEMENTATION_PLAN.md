@@ -539,7 +539,7 @@ gqmr export robot.npz --format isaaclab_amp_v232 --output amp.npz
 
 ### 迭代 1：资产和 schema
 
-- [ ] 建立项目包、锁文件和 CI。（项目包与 CLI 骨架已完成；`uv.lock`、CI 待完成）
+- [x] 建立项目包、真实 `uv.lock` 和 Ubuntu 24.04 CI。
 - [x] 实现固定提交 Unitree 资产安装器和 manifest。
 - [x] 建立 Go2/B2 配置、加载和 FK/Jacobian 测试。
 - [x] 实现 `AnimalMotion v1`、`RobotMotion v1` 和安全 NPZ I/O。
@@ -558,7 +558,7 @@ gqmr export robot.npz --format isaaclab_amp_v232 --output amp.npz
 ### 迭代 3：AMP 往返和 B2
 
 - [x] 实现 `isaaclab_amp_v232` 导出器。
-- [ ] 使用 Isaac Lab 原版 MotionLoader 加载、插值采样和名称重排。
+- [x] 使用 Isaac Lab v2.3.2 原版 MotionLoader 加载、1000 点采样和名称重排。
 - [x] 从导出结果恢复 MuJoCo Go2/B2 姿态并比较 FK。
 - [x] 接入 B2 的 calf body + 足端局部偏移配置。
-- [ ] 冻结 CLI v0.1 前的核心接口。
+- [x] 冻结 CLI v0.1 前的核心 schema、机器人、重定向和导出接口。

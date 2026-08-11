@@ -1,0 +1,26 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "serialNumber": "urn:uuid:9ddd9dc6-4184-4d47-80c4-1ee1d0e22a50",
+  "version": 1,
+  "metadata": {
+    "component": {
+      "type": "application",
+      "name": "gqmr",
+      "version": "0.0.1",
+      "licenses": [{"license": {"id": "MIT"}}]
+    }
+  },
+  "components": [
+    {"type": "library", "name": "av", "version": "16.1.0", "purl": "pkg:pypi/av@16.1.0"},
+    {"type": "library", "name": "mujoco", "version": "3.11.0", "purl": "pkg:pypi/mujoco@3.11.0"},
+    {"type": "library", "name": "numpy", "version": "2.5.2", "purl": "pkg:pypi/numpy@2.5.2"},
+    {"type": "library", "name": "platformdirs", "version": "4.11.2", "purl": "pkg:pypi/platformdirs@4.11.2"},
+    {"type": "library", "name": "pydantic", "version": "2.13.4", "purl": "pkg:pypi/pydantic@2.13.4"},
+    {"type": "library", "name": "PySide6", "version": "6.11.1", "purl": "pkg:pypi/pyside6@6.11.1"},
+    {"type": "library", "name": "PyYAML", "version": "6.0.3", "purl": "pkg:pypi/pyyaml@6.0.3"},
+    {"type": "library", "name": "pyzmq", "version": "27.1.0", "purl": "pkg:pypi/pyzmq@27.1.0"},
+    {"type": "library", "name": "scipy", "version": "1.18.0", "purl": "pkg:pypi/scipy@1.18.0"},
+    {"type": "library", "name": "shiboken6", "version": "6.11.1", "purl": "pkg:pypi/shiboken6@6.11.1"}
+  ]
+}

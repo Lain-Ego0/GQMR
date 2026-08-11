@@ -74,7 +74,7 @@ class ProcessJob:
             raise ProcessJobError(payload)
         return payload
 
-    def cancel(self, *, grace_seconds: float = 2.0) -> None:
+    def cancel(self, *, grace_seconds: float = 1.5) -> None:
         if self._process is None or not self._process.is_alive():
             return
         deadline = time.monotonic() + grace_seconds

@@ -242,6 +242,23 @@ class RobotModel:
     def foot_jacobians(self) -> NDArray[np.float64]:
         return np.stack([self.foot_jacobian(leg) for leg in LEG_ORDER])
 
+    def collision_metrics(self) -> tuple[int, float]:
+        """Return self-contact count and maximum world-geom penetration depth."""
+
+        self_contacts = 0
+        maximum_ground_penetration = 0.0
+        for contact_index in range(self.data.ncon):
+            contact = self.data.contact[contact_index]
+            body_a = int(self.model.geom_bodyid[contact.geom1])
+            body_b = int(self.model.geom_bodyid[contact.geom2])
+            if body_a != 0 and body_b != 0:
+                self_contacts += 1
+            elif contact.dist < 0.0:
+                maximum_ground_penetration = max(
+                    maximum_ground_penetration, float(-contact.dist)
+                )
+        return self_contacts, maximum_ground_penetration
+
 
 def load_robot_model(
     robot_id: str, *, cache_dir: str | os.PathLike[str] | None = None

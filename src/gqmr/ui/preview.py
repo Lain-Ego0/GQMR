@@ -89,10 +89,14 @@ class MotionPreview(QWidget):
                     center = self._project(point, animal_rect, bounds)
                     painter.drawEllipse(center, 3.2, 3.2)
 
-        if self.robot is not None and self.diagnostics is not None:
+        if self.robot is not None:
             frame = min(self.frame, self.robot.frame_count - 1)
             root = self.robot.root_position[frame]
-            feet = self.diagnostics.achieved_foot_positions[frame]
+            feet = (
+                self.diagnostics.achieved_foot_positions[frame]
+                if self.diagnostics is not None
+                else np.empty((0, 3), dtype=np.float32)
+            )
             points = np.vstack((root, feet))
             bounds = (
                 float(np.min(points[:, 0]) - 0.12),

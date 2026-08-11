@@ -11,6 +11,7 @@ import numpy as np
 
 from gqmr.pose.api import KeypointBatch, PoseDataError
 from gqmr.exporters.common import atomic_write
+from gqmr.core.json import StrictJSONError, loads_strict_json
 
 
 def _timestamps(frames: int, fps: float) -> np.ndarray:
@@ -21,8 +22,8 @@ def _timestamps(frames: int, fps: float) -> np.ndarray:
 
 def load_generic_keypoints_json(path: str | Path) -> KeypointBatch:
     try:
-        document = json.loads(Path(path).read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        document = loads_strict_json(Path(path).read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError, StrictJSONError) as error:
         raise PoseDataError(f"cannot read keypoint JSON: {error}") from error
     if not isinstance(document, dict):
         raise PoseDataError("keypoint JSON must be an object")
@@ -46,6 +47,73 @@ def load_generic_keypoints_json(path: str | Path) -> KeypointBatch:
         valid_mask=document["valid_mask"],
         coordinate_frame=document["coordinate_frame"],
         metadata=dict(document.get("metadata", {})),
+    )
+
+
+def load_generic_keypoints_csv(path: str | Path) -> KeypointBatch:
+    """Load long-form timestamp,instance,keypoint,x,y[,z],confidence CSV."""
+
+    try:
+        with Path(path).open("r", encoding="utf-8", newline="") as stream:
+            reader = csv.DictReader(stream)
+            required = {"timestamp", "instance", "keypoint", "x", "y", "confidence"}
+            if reader.fieldnames is None or not required.issubset(reader.fieldnames):
+                raise PoseDataError(
+                    "generic CSV must contain timestamp,instance,keypoint,x,y,confidence"
+                )
+            dimensions = 3 if "z" in reader.fieldnames else 2
+            rows = list(reader)
+    except (OSError, UnicodeError, csv.Error) as error:
+        raise PoseDataError(f"cannot read generic keypoint CSV: {error}") from error
+    if not rows:
+        raise PoseDataError("generic keypoint CSV has no observations")
+    try:
+        times = sorted({float(row["timestamp"]) for row in rows})
+    except ValueError as error:
+        raise PoseDataError("generic keypoint CSV timestamp must be numeric") from error
+    instances = list(dict.fromkeys(row["instance"] for row in rows))
+    names = list(dict.fromkeys(row["keypoint"] for row in rows))
+    if any(not value for value in (*instances, *names)):
+        raise PoseDataError("generic keypoint CSV instance/keypoint names are required")
+    time_index = {value: index for index, value in enumerate(times)}
+    instance_index = {value: index for index, value in enumerate(instances)}
+    name_index = {value: index for index, value in enumerate(names)}
+    shape = (len(times), len(instances), len(names))
+    positions = np.full((*shape, dimensions), np.nan, dtype=np.float32)
+    confidence = np.zeros(shape, dtype=np.float32)
+    seen: set[tuple[int, int, int]] = set()
+    for row in rows:
+        index = (
+            time_index[float(row["timestamp"])],
+            instance_index[row["instance"]],
+            name_index[row["keypoint"]],
+        )
+        if index in seen:
+            raise PoseDataError("generic keypoint CSV has a duplicate observation")
+        seen.add(index)
+        try:
+            coordinate = [float(row["x"]), float(row["y"])]
+            if dimensions == 3:
+                coordinate.append(float(row["z"]))
+            positions[index] = coordinate
+            confidence[index] = float(row["confidence"])
+        except ValueError as error:
+            raise PoseDataError("generic keypoint CSV contains a non-numeric value") from error
+    valid = np.all(np.isfinite(positions), axis=-1)
+    coordinate_frame = (
+        "gqmr_world_x_forward_y_left_z_up"
+        if dimensions == 3
+        else "image_pixels_x_right_y_down"
+    )
+    return KeypointBatch(
+        timestamps=times,
+        keypoint_names=tuple(names),
+        instance_ids=tuple(instances),
+        positions=positions,
+        confidence=confidence,
+        valid_mask=valid,
+        coordinate_frame=coordinate_frame,
+        metadata={"format": "generic_long_csv", "path": str(path)},
     )
 
 
@@ -130,13 +198,12 @@ def load_deeplabcut_csv(path: str | Path, *, fps: float) -> KeypointBatch:
             except (IndexError, ValueError) as error:
                 raise PoseDataError(f"invalid DeepLabCut value at data row {frame + 1}") from error
     valid = np.all(np.isfinite(positions), axis=-1) & np.isfinite(confidence)
-    confidence = np.nan_to_num(confidence, nan=0.0)
     return KeypointBatch(
         timestamps=_timestamps(frames, fps),
         keypoint_names=tuple(names),
         instance_ids=("animal-0",),
         positions=positions,
-        confidence=np.clip(confidence, 0.0, 1.0),
+        confidence=confidence,
         valid_mask=valid,
         coordinate_frame="image_pixels_x_right_y_down",
         metadata={"format": "deeplabcut_csv", "path": str(path)},
@@ -183,7 +250,7 @@ def load_sleap_csv(path: str | Path, *, fps: float) -> KeypointBatch:
         keypoint_names=tuple(nodes),
         instance_ids=tuple(tracks),
         positions=positions,
-        confidence=np.clip(confidence, 0.0, 1.0),
+        confidence=confidence,
         valid_mask=valid,
         coordinate_frame="image_pixels_x_right_y_down",
         metadata={"format": "sleap_csv", "first_frame_idx": frame_ids[0], "path": str(path)},

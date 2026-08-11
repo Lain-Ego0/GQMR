@@ -20,6 +20,8 @@ def replay_quality_report(motion: RobotMotion, robot: RobotModel) -> dict[str, A
         raise RobotModelError("RobotMotion DOF order does not match replay robot")
     feet = np.full((motion.frame_count, 4, 3), np.nan, dtype=np.float64)
     replayed = np.zeros(motion.frame_count, dtype=np.bool_)
+    self_collision_frames = 0
+    maximum_ground_penetration = 0.0
     lower, upper = robot.joint_ranges[:, 0], robot.joint_ranges[:, 1]
     finite_pose = (
         np.all(np.isfinite(motion.root_position), axis=1)
@@ -37,6 +39,11 @@ def replay_quality_report(motion: RobotMotion, robot: RobotModel) -> dict[str, A
             continue
         feet[frame] = robot.foot_positions()
         replayed[frame] = True
+        self_contacts, ground_penetration = robot.collision_metrics()
+        self_collision_frames += int(self_contacts > 0)
+        maximum_ground_penetration = max(
+            maximum_ground_penetration, ground_penetration
+        )
 
     joint_limit_violation = np.any(
         (motion.dof_position < lower) | (motion.dof_position > upper), axis=1
@@ -61,6 +68,8 @@ def replay_quality_report(motion: RobotMotion, robot: RobotModel) -> dict[str, A
         "valid_frames": valid_count,
         "valid_frame_ratio": valid_count / motion.frame_count,
         "joint_limit_violation_frames": int(np.count_nonzero(joint_limit_violation)),
+        "self_collision_frames": self_collision_frames,
+        "maximum_ground_penetration_m": maximum_ground_penetration,
         "solver_residual_rmse_m": (
             float(np.sqrt(np.mean(residual * residual))) if len(residual) else None
         ),

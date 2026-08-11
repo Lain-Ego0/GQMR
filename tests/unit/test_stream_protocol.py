@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 from gqmr.stream.protocol import StreamProtocolError, decode_frame, encode_frame
+from gqmr.stream import GQMRPublisher
 
 
 def test_frame_multipart_roundtrip_is_little_endian_and_copy_safe() -> None:
@@ -29,3 +30,8 @@ def test_frame_decoder_rejects_wrong_payload_size() -> None:
 
     with pytest.raises(StreamProtocolError, match="byte length"):
         decode_frame(parts)
+
+
+def test_non_loopback_publisher_requires_curve_keys() -> None:
+    with pytest.raises(StreamProtocolError, match="CurveZMQ"):
+        GQMRPublisher({}, endpoint="tcp://0.0.0.0:5570")

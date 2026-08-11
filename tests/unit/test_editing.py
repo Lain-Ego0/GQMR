@@ -15,6 +15,7 @@ from gqmr.editing import (
 )
 from dataclasses import replace
 from gqmr.core.coordinates import quaternion_geodesic_distance
+from gqmr.core.io import motion_sha256
 from test_motion_io import make_robot_motion
 from gqmr.project.model import EditCommand
 from gqmr.synthetic import generate_dog27_motion
@@ -127,3 +128,17 @@ def test_filter_and_concatenate_robot_motion() -> None:
     assert combined.frame_count == 21
     assert np.all(np.diff(combined.timestamps) > 0.0)
     assert combined.timestamps[-1] == pytest.approx(0.2)
+
+
+def test_one_hundred_undo_redo_cycles_preserve_hash() -> None:
+    motion = generate_dog27_motion("walk", duration=0.2, fps=20.0)
+    stack = EditStack(motion)
+    for _ in range(100):
+        stack.push(_command("time_scale", {"speed": 1.0}))
+    edited_hash = motion_sha256(stack.current())
+    for _ in range(100):
+        stack.undo()
+    assert motion_sha256(stack.current()) == motion_sha256(motion)
+    for _ in range(100):
+        stack.redo()
+    assert motion_sha256(stack.current()) == edited_hash

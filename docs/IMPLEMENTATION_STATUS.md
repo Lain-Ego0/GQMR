@@ -2,184 +2,152 @@
 
 > 状态日期：2026-08-11  
 > 当前代码版本：`0.0.1`  
-> 作用：记录实际代码完成度、验证证据和实施中发现的问题；冻结的产品决策仍以 `IMPLEMENTATION_PLAN.md` 和各 v1 协议为准。
+> 冻结环境：Python 3.12.3、MuJoCo 3.11.0、NumPy 2.5.2、SciPy 1.18.0、PySide6 6.11.1  
+> 作用：记录仓库实际完成度、验证证据和仍需外部环境执行的发布审计。
 
-## 1. 本次已实现
+## 1. 已完成的产品闭环
 
-### 1.1 工程骨架
+### 1.1 工程、依赖和资产
 
-- 建立 `pyproject.toml`、`src/gqmr`、`tests` 和 `gqmr` console script。
-- 包构建明确只包含 `src/gqmr`，历史 CC BY-NC 动作目录不进入 wheel 配置。
-- CLI 已提供：
+- `pyproject.toml` 和真实 `uv.lock` 已提交，锁定 33 个包。
+- GitHub Actions 在 Ubuntu 24.04 执行 frozen sync、compileall、pytest、wheel/sdist 构建和限制数据扫描。
+- Unitree Go2/B2 使用固定提交 `ae6a8403e272733e9996ef59990880330496177f`，实现归档/逐文件 hash、安全安装、状态复验和离线 pack/unpack。
+- wheel 和 sdist 都排除 `motion_imitation` 与 CC BY-NC `*_joint_pos.txt`；该检查已固化到 CI。
+- 已生成第三方许可证清单和 CycloneDX SBOM，GUI 包含 LGPL/Qt “关于”入口。
+
+### 1.2 Motion Schema v1 与安全 I/O
+
+- `AnimalMotion` / `RobotMotion` 严格验证时间轴、名称、单位、坐标、wxyz 四元数、接触概率、求解状态和模型 hash。
+- NPZ 加载固定 `allow_pickle=False`，拒绝 object dtype、额外字段、重复 ZIP/JSON key、路径、加密成员、异常压缩比、非有限 JSON 和错误 dtype/endian。
+- 输出使用同目录临时文件、`fsync` 和原子替换；规范内容可生成确定性 SHA-256。
+- 数值层包含 wxyz/xyzw、矩阵往返、短弧 SLERP、SO(3) 角速度和非等间时间差分。
+
+### 1.3 dog-27、通用姿态与视频
+
+- dog-27 已固化 27 点名称、父子拓扑、对称、根标志、肢体链和历史索引；详见 `DOG27_PROTOCOL_V1.md`。
+- 历史 81 列 TXT 严格读取并执行 `Rz(0.47*pi) @ Rx(0.5*pi)`，保留 CC-BY-NC 来源标记而不将数据进入发布物。
+- 独立生成 MIT walk/trot/pace/turn，作为 CI、演示和量化验收数据。
+- 支持通用长表 CSV、严格 JSON/NPZ、DeepLabCut CSV 和 SLEAP 多轨 CSV。
+- `KeypointBatch` 支持 2D/3D、多实例、置信度、有效掩码和坐标描述；已实现标定相机 DLT 三角化与重投影误差。
+- PyAV 解码保留原始 PTS/time base，关键点可按容差与视频精确对齐。
+- 姿态插件 API v1 和 entry point 发现已实现，长任务可通过 `spawn` 子进程运行和强制清理。
+
+### 1.4 机器人泛化与 MuJoCo
+
+- Go2/B2 Pydantic YAML 配置、`$root` 解析、业务 DOF 顺序、限位、body/局部足端和 contact geom 绑定已完成。
+- FK、body pose、单足/四足 Jacobian、碰撞/地面穿透统计和 actuator 绑定都使用同一 `RobotModel`。
+- `robots suggest` 对任意 MJCF 生成只读候选 DOF/足端报告，ball/非 12 DOF/无唯一 free root 会说明拒绝原因。
+- 用户 MJCF 目录可计算确定性 hash，通过外部 YAML 无源码修改加载；拒绝 symlink、超量文件和 hash 不匹配。
+
+### 1.5 重定向、回放和编辑
+
+- 动物根姿态估计支持缺失/退化几何，同时估计躯干、肢长和接触概率。
+- 快速模式使用热启动 MuJoCo Jacobian DLS，硬裁剪限位并保留逐帧残差/状态。
+- 高质量模式在滑动窗中执行接触锁定、平滑正则、地面最小高度和自碰撞回退。
+- MuJoCo FK 质量报告包含限位、残差、接触滑移、地面穿透和自碰撞；PD 回放额外报告跌倒时间、根/关节跟踪误差和峰值控制量，且明确标记为诊断而非稳定性承诺。
+- 非破坏性编辑包含 trim、变速、重采样、根变换、接触覆盖、SO(3) 平滑滤波、对齐拼接和循环闭合。
+- 撤销/重做基于稳定 UUID 命令重放；100 次 undo/redo 后的运动 hash 与预期完全一致。
+
+### 1.6 导出与 Isaac Lab
+
+- canonical NPZ、DeepMimic root xyz + root xyzw + scalar DOF JSON 已实现。
+- Isaac Lab `v2.3.2` AMP 导出使用 Hermite/SLERP 重采样，从固定 MuJoCo 模型重算全具名 body 位姿和世界系速度。
+- 严格兼容加载器验证字段/形状/dtype/四元数；Go2/B2 逐帧恢复 MuJoCo 的 body 位置和姿态误差 `<1e-5`。
+- 已直接下载并执行 Isaac Lab v2.3.2 原版 `MotionLoader`：61 帧、12 DOF、17 body、1000 个随机时间点全部有限，DOF/body 名称重排通过。
+- DOF/body 线速度和 body 角速度与重新计算值的 RMSE 满足 `<1%`。
+
+### 1.7 `.gqmr` 工程与 GUI
+
+- `project.json` / `edits.json` 实现冻结 v1 顶层字段、UUID 资源、SHA-256、时间线和编辑命令。
+- ZIP64 项目加载拒绝路径穿越、重复/加密/意外成员、超量和异常压缩；嵌入资源会复验 size/hash。
+- 普通保存保留一份 `.bak`，portable pack 嵌入选中资源，GUI 可直接打开嵌入工程。
+- PySide6 GUI 实现导入/合成、Go2/B2 选择、快速/高质量后台任务、取消、动物/机器人时间线预览、质量日志、编辑/撤销/重做、工程和三种导出。
+- 已生成可展示截图 `docs/images/gqmr-gui.png`。
+
+### 1.8 MuJoCo Stream Protocol v1
+
+- ROUTER/DEALER `HELLO/WELCOME/FRAME/ACK/GAP/HEARTBEAT/ERROR/BYE` 已实现，数组是 little-endian 原始 multipart。
+- publisher 的仿真线程路径只复制进有界 ring，ZeroMQ socket 由专用线程持有；每个客户独立 credit 和序列状态。
+- recorder 验证模型 hash、完整 qpos/qvel layout、shape/dtype/session/seq，乱序或无 GAP 跳号立即拒绝。
+- ring 溢出生成明确 GAP，并保存到 `RobotMotion.metadata.retarget_config`；不伪造连续时间轴。
+- 默认只允许 loopback；非本机地址必须配置 40-byte Z85 CurveZMQ server/client key。
+
+## 2. CLI 与可展示结果
+
+主要命令：
 
 ```text
-gqmr inspect <motion.npz>
-gqmr validate <motion.npz> [--model-sha256 SHA256 | --robot ROBOT]
-gqmr assets install|status|pack|unpack ...
-gqmr robots inspect <robot>
-gqmr synthetic walk|trot|pace|turn --output animal.npz
-gqmr convert legacy.txt --skeleton dog-27 --fps 60 --output animal.npz
-gqmr retarget animal.npz --robot unitree-go2 --output robot.npz
-gqmr play robot.npz --robot unitree-go2
-gqmr export robot.npz --format canonical|deepmimic|isaaclab_amp_v232 --output ...
+gqmr inspect / validate / convert / synthetic
+gqmr assets install|status|pack|unpack
+gqmr robots inspect|suggest|hash-assets|inspect-config
+gqmr retarget --mode fast|high-quality
+gqmr play [--dynamics]
+gqmr export --format canonical|deepmimic|isaaclab_amp_v232
+gqmr edit trim|time-scale|root-transform|contact|resample|filter|splice|loop
+gqmr project new|info|add|pack
+gqmr stream record
+gqmr pose inspect|convert|triangulate
+gqmr gui
 ```
 
-- CLI 成功和失败结果均为 JSON；协议错误返回退出码 `2`，不向普通用户输出 Python traceback。
+`examples/demo` 已包含 MIT 合成 trot 的：
 
-### 1.2 数值基础
+- dog-27 AnimalMotion
+- Go2 高质量 RobotMotion
+- Isaac Lab AMP NPZ
+- DeepMimic JSON
+- 运动学 + PD 动力学质量报告
+- 嵌入 animal/robot 资源的 portable `.gqmr` 工程
 
-- 具名 `wxyz_to_xyzw`、`xyzw_to_wxyz`，禁止业务代码手写四元数切片。
-- 四元数归一化、序列符号连续化、旋转矩阵往返、无符号测地角。
-- 最短弧 SLERP，拒绝时间范围外的隐式外推。
-- 非等间隔时间轴的位置/标量速度估计。
-- 基于 SO(3) log map 的世界系根角速度估计。
+## 3. 自动验证和量化证据
 
-### 1.3 Motion Schema v1
+冻结环境命令：
 
-- 实现 `AnimalMotion` 和 `RobotMotion` 不可变数据对象。
-- 验证 schema 固定字段要求：时间戳、名称唯一性、数组形状、概率范围、有效掩码、求解状态、残差、四元数单位范数和 metadata 固定语义。
-- `solver_status` 为 `UNREACHABLE`、`MISSING_INPUT` 或 `NUMERICAL_ERROR` 的帧禁止标为有效；`INTERPOLATED` 保留文档规定的人工修复语义。
-- RobotMotion 可在加载时绑定调用方给出的 `model_sha256`，不匹配立即拒绝。
+```bash
+env -u PYTHONPATH QT_QPA_PLATFORM=offscreen MUJOCO_GL=egl \
+GQMR_TEST_ASSET_CACHE=<verified-cache> uv run --frozen pytest -q
+```
 
-### 1.4 安全 NPZ I/O
-
-- 加载固定使用 `allow_pickle=False`。
-- 加载前检查 ZIP/NPZ 成员数量、成员路径、重复成员名、加密成员、未压缩总大小和异常压缩比。
-- 严格拒绝 object dtype、非 Unicode 名称、错误 endian/dtype、缺失字段、额外字段和非 C-contiguous 数组。
-- `metadata_json` 只接受 UTF-8 `uint8[M]` 严格 JSON，拒绝 NaN/Infinity、重复 JSON key 和非对象顶层值。
-- 保存统一输出 little-endian float、C contiguous 数组和稳定排序 JSON。
-- RobotMotion 保存时修正相邻有限四元数的符号跳变。
-- 保存使用同目录临时文件、文件 `fsync`、原子替换和目录 `fsync`；失败时清理临时文件。
-
-### 1.5 Unitree 资产供应链
-
-- 内置 Go2/B2 固定提交逐文件 manifest，官方归档 SHA-256 为 `824a51b228c317348866180b1214ed736621d2163006d682156d54b6a55da711`。
-- Go2 只安装许可证、2 个 XML 和 16 个 OBJ，共 19 个文件、28,427,057 bytes。
-- B2 只安装许可证、2 个 XML 和 31 个 mesh，共 34 个文件、31,573,113 bytes。
-- 预览图、terrain scene、height field 和其他上游仓库内容不会进入默认资产缓存或离线包。
-- 实现 `assets install/status/pack/unpack`，支持显式缓存目录、预下载归档、损坏缓存修复和离线部署。
-- tar.gz 安装拒绝错误归档 hash、绝对路径、`..`、重复成员、链接/特殊文件、超量成员和异常解压体积，只提取 manifest 声明的文件。
-- 离线 ZIP64 包再次校验固定内置 manifest、成员集合、逐文件 hash、路径、文件类型、压缩比和解压总量。
-- 安装状态会报告来源提交、许可证、精确大小、`model_sha256`、缺失、损坏和意外文件。
-- `model_sha256` 定义为 XML/mesh 文件清单的确定性聚合 hash；许可证保留在逐文件完整性校验中，但不改变机器人模型身份。完整算法见 `ASSET_MANIFEST_V1.md`。
-
-### 1.6 机器人配置与 MuJoCo 绑定
-
-- 使用 Pydantic v2 严格验证内置 Go2/B2 YAML；拒绝未知字段、重复 YAML key、不安全模型路径、错误 hash、重复 DOF、非单位根四元数和非有限默认值。
-- `$root` 解析为模型中唯一 free joint，因此同时支持 Go2 的无名 free joint和 B2 的 `floating_base_joint`，业务代码不依赖上游根关节名称差异。
-- 加载时要求可信资产状态、配置 `model_sha256` 和 manifest 完全一致。
-- 验证模型恰好包含一个自由根、12 个具名标量 hinge/slide DOF、完整硬限位、`base_body`、足端 body/局部点和接触 geom。
-- 业务 DOF 顺序只来自配置；已用故意打乱 MJCF 声明顺序的合成模型证明 qpos/qvel 地址不会冒充业务顺序。
-- 提供根姿态/12 DOF 写入、body/足端 FK、单足/四足 Jacobian 和碰撞 geom 聚合 API。
-- Go2 使用具名 `FL/FR/RL/RR` contact geom；B2 按 calf body 聚合所有启用接触的 collision geom。
-- `gqmr robots inspect` 输出模型维度、配置/model hash、业务 DOF、qpos/qvel 地址、关节限位和足端绑定。
-- `gqmr validate --robot` 同时验证可信资产、机器人配置、模型 hash 和 RobotMotion DOF 规范顺序。
-- 详细机器语义见 `ROBOT_CONFIG_V1.md`。
-
-### 1.7 dog-27 输入与 MIT 合成动作
-
-- 固化 27 点名称、父子拓扑、9 组左右对称、根标志和四肢链；历史核心索引与趾端索引已写入自动测试。
-- 严格读取 81 列历史文本，实施大小上限、列数、数值有限性和帧范围校验。
-- 历史坐标转换固定为 `Rz(0.47*pi) @ Rx(0.5*pi)`，不混入机器人比例。
-- 实现确定性 MIT walk/trot/pace/turn 生成器，不复制 CC BY-NC 历史动作。
-- 实现根位置/姿态估计、退化帧状态、躯干/肢体尺度和趾端接触概率估计。
-- 协议和中间点命名的不确定性见 `DOG27_PROTOCOL_V1.md`。
-
-### 1.8 快速重定向与训练导出
-
-- 实现根运动相对映射、躯干/肢长比例解算和四足目标生成。
-- 在 MuJoCo 足端 Jacobian 上实现逐帧热启动 DLS IK，包含阻尼、步长限制、硬关节限位、残差和 `OK/MAX_ITER/UNREACHABLE/MISSING_INPUT/NUMERICAL_ERROR`状态。
-- `play` 对规范轨迹执行 MuJoCo FK 回放，报告有效帧、限位违规、求解残差、接触滑移速度和最低足高。
-- 实现 DeepMimic 兼容 JSON（root xyz + root xyzw + 12 标量 DOF）。
-- 实现 Isaac Lab v2.3.2 AMP NPZ：60 Hz Hermite/SLERP 重采样、MuJoCo 全具名 body FK、wxyz 姿态和世界系 body 速度。
-- 实现轻量 AMP 兼容加载/随机时间采样器，并完成 Go2/B2 逐帧 MuJoCo FK 往返。
-
-## 2. 自动验证结果
-
-当前环境：Python 3.12.3、MuJoCo 3.8.0、NumPy 1.26.4、SciPy 1.11.4、Pydantic 2.11.7、pytest 7.4.4。Pydantic/platformdirs 仅为本机验证安装在被忽略的 `.deps`。
+结果：
 
 ```text
-67 passed
+98 passed
 python -m compileall: passed
-CLI version smoke test: gqmr 0.0.1
+wheel + sdist: passed
+clean temporary venv wheel install: passed
 ```
 
-与验收 ID 的对应关系：
-
-| ID | 当前状态 | 自动证据 |
-|---|---|---|
-| NUM-001 | 已实现并通过当前环境测试 | 100,000 个随机单位四元数 `wxyz↔xyzw` 往返 |
-| NUM-002 | 已实现并通过当前环境测试 | 10,000 个随机旋转的矩阵/四元数测地角误差门槛 |
-| NUM-003 | 已实现并通过当前环境测试 | 单位范数、相邻符号连续、短弧中点 |
-| NUM-004 | 已实现并通过当前环境测试 | Go2 FK 最大误差 `0 m`；B2 `5.55e-17 m`，独立解析链对照 |
-| NUM-005 | 已实现并通过当前环境测试 | Go2/B2 各 100 个合法姿态，最大相对误差分别 `2.81e-10`、`2.76e-10` |
-| NUM-006 | 核心算法已实现并通过当前环境测试 | 非等间隔正弦线速度和恒角速度 RMSE `<1%` |
-| DAT-001 | 核心加载器已实现并通过 | object dtype、非法 JSON、重复 NPZ 名和重复 JSON key 均拒绝 |
-| DAT-002 | 已实现并通过 | 重复、倒序、NaN、非零起点时间轴均拒绝 |
-| DAT-003 | 已实现并通过 | `validate/play/export --robot` 共用可信资产、配置、模型 hash 和 DOF 顺序绑定 |
-| DAT-004 | 已实现并通过 | 数据层禁止严重失败状态伪装成有效帧；导出器拒绝任何含无效帧的区间 |
-| RET-001 | 已实现并通过当前环境测试 | Go2/B2 共 8 组合成动作硬限位违规 0 帧 |
-| RET-002 | 已实现并通过当前环境测试 | walk/trot/pace/turn 在 Go2/B2 上有效帧率 100% |
-| RET-003 | 已实现并通过当前环境测试 | 全部 8 组有效帧足端 RMSE `<= 0.03 m` |
-| AMP-001 | 兼容字段和采样已实现 | 严格字段/形状/dtype 加载和 1000 个随机时间点采样通过；原版 Isaac Lab 仍待冻结环境验证 |
-| AMP-002 | 已实现并通过当前环境测试 | Go2/B2 AMP 逐帧恢复 MuJoCo，body 位置和姿态误差 `<1e-5` |
-
-真实上游集成验证：
+真实资产和数值结果：
 
 | 项目 | 结果 |
 |---|---|
-| 固定归档下载与归档 SHA-256 | 通过 |
-| Go2 逐文件安装和状态复验 | 通过，`model_sha256=48baeb791c25c3fdaca0163c614145ade0e29d710ee9fcce9d8a5f551e3ca2e1` |
-| B2 逐文件安装和状态复验 | 通过，`model_sha256=2ebeb90cb3cee67b4ae37e719244454b854719db126d9394ed89d3f0c9ec76e5` |
-| Go2 离线 pack/unpack | 通过，解包后逐文件复验通过 |
-| MuJoCo 加载 | Go2/B2 均通过；`nq=19`、`nv=18`、`nu=12` |
-| 默认姿态 FK golden | Go2 最大误差 `0 m`；B2 最大误差 `5.55e-17 m` |
-| Jacobian 中心有限差分 | 每个模型 100 个合法姿态；最大相对误差 `<2.81e-10` |
+| Go2/B2 加载 | `nq=19, nv=18, nu=12` |
+| Go2 FK golden | 最大误差 `0 m` |
+| B2 FK golden | 最大误差 `5.55e-17 m` |
+| Jacobian | 各 100 个姿态，最大相对误差 `<2.81e-10` |
+| 快速重定向 | Go2/B2 × walk/trot/pace/turn，有效帧 100%，RMSE `<=0.03 m`，限位违规 0 |
+| 高质量接触 | walk/trot/pace 滑移降至快速模式的约 26%–32%，自碰撞帧 0 |
+| 离线快速模式 | `1367 frames/s` |
+| 高质量模式 | `112 frames/s` |
+| 200 Hz 短时流式基线 | 2 s / 400 帧 / 0 GAP / `199.8 Hz` |
+| Isaac Lab 原版 Loader | 1000 随机采样全有限，名称重排通过 |
+| AMP MuJoCo 往返 | Go2/B2 body 位置/旋转 `<1e-5` |
+| 100 次 undo/redo | 最终内容 hash 完全一致 |
 
-这里的“通过”只代表当前开发环境的自动测试。正式发布结论仍需在冻结依赖和参考机上运行完整验收，不提前替代发布验收报告。
+## 4. 实施中发现并已解决的问题
 
-## 3. 实施中发现的问题
+- B2 calf 原冻结默认值 `-2.84 rad` 超出上游 `-2.82 rad` 限位，已改为 `-2.80 rad`。
+- 初始环境没有 pip/venv/uv，已用验证 wheel 完成开发验证，随后生成真实 `uv.lock` 并在 frozen venv 重跑全部测试。
+- 原本机 MuJoCo 3.8.0 只能做预验证；现已在冻结 MuJoCo 3.11.0 完成全矩阵。
+- 首次 sdist 构建仍包含 CC BY-NC 历史数据；已添加独立 sdist exclude 并在 CI 同时扫描 wheel/sdist。
+- Isaac Lab 轻量兼容加载器的采样细节与原版不完全相同；已使用固定 v2.3.2 原文件 + CPU Torch 直接执行验证，不再用“字段似乎相同”代替验收。
 
-### ISSUE-001：发布锁文件尚不能生成
+## 5. 发布前仍需执行的长时/外部审计
 
-- 当前机器没有 `uv`，也没有 `hatchling`。
-- `pyproject.toml` 已按冻结基线声明 Python 3.12、NumPy 2.5 和 SciPy 1.18，但本轮只能使用系统已有 NumPy 1.26/SciPy 1.11 做兼容性测试。
-- 影响：`uv.lock`、wheel/sdist 构建和“干净环境单命令安装”尚不能声明完成。
-- 处理：下一步在具备 `uv` 和包索引访问的构建环境生成锁文件，安装冻结版本后重跑全部测试；不得手工伪造 lock。
+以下项目不是当前功能缺口，但在宣布 `v1.0.0` 发布验收前不得省略：
 
-### ISSUE-002：模型绑定还缺可信资产来源（已解决）
+1. 在参考机运行 `tools/benchmark_release.py --stream-seconds 1800`，完成 200 Hz / 30 分钟、内存增长、延迟和源仿真降速审计。
+2. 在真实桌面 EGL 和参考 GPU 上运行 GUI 长时播放/取消，以及第三方 DeepLabCut/SLEAP 实际数据集验收。
+3. 使用正式发布签名、完整许可证文本归档和包签名流程生成 `v1.0.0` 产物。
 
-- 固定提交资产安装器、Go2/B2 逐文件 manifest 和可信 `model_sha256` 已落地。
-- Go2/B2 Pydantic YAML、配置 hash、MuJoCo 名称解析和 `validate --robot` 已接入同一可信链。
-- 回放和导出命令实现后仍需复用该入口，不允许各自绕过模型绑定。
-
-### ISSUE-003：当前没有可发布的机器人闭环（已解决核心路径）
-
-- 仓库中的 `motion_imitation` 是算法迁移参考，且历史动作数据为 CC BY-NC；它不能充当正式 CI 测试集或发布示例。
-- MIT 合成动作、快速 IK、MuJoCo FK 回放、DeepMimic 和 AMP 往返已实现。
-- 剩余工作是在冻结 Isaac Lab v2.3.2 环境运行原版 `MotionLoader`，以及后续 PD 动力学报告。
-
-### ISSUE-004：本机 MuJoCo 版本不是冻结发布基线
-
-- 本机可用 MuJoCo 为 3.8.0；冻结运行环境指定 MuJoCo 3.11 系列。
-- 本轮真实 Go2/B2 加载结果与计划中的技术验证数据一致，但只能算资产兼容性预验证。
-- `pyproject.toml` 已声明 `mujoco>=3.11,<3.12`。生成 `uv.lock` 后必须在 3.11 系列重跑加载、FK、Jacobian、接触和 AMP 往返，才能形成发布证据。
-
-### ISSUE-005：B2 冻结默认姿态违反硬限位（已解决）
-
-- 原计划每条 B2 腿默认值为 `[0.0, 1.28, -2.84] rad`，但固定上游 MJCF 的 calf 硬限位为 `[-2.82, -0.43] rad`。
-- 这会使模型初始化立即违反 RET-001，并被严格加载器正确拒绝。
-- 默认 calf 已修正为 `-2.80 rad`，保留 `0.02 rad` 安全余量；schema 和资产 `model_sha256` 不变，B2 默认姿态和 `robot_config_sha256` 改变。
-
-### ISSUE-006：当前 Python 缺少 venv/pip
-
-- 系统 Python 3.12 没有 `ensurepip`、`pip` 或可用的 `python3.12-venv`，无法创建常规开发虚拟环境。
-- 本轮只为验证从 PyPI 下载固定 wheel、逐个核对官方 SHA-256 后解压到被忽略的 `.deps`，没有修改系统或用户级 Python。
-- 该目录不是发布物，也不替代 `uv.lock`；干净构建环境仍必须通过 `uv sync` 安装正式锁定依赖。
-
-## 4. 下一步顺序
-
-1. 实现 `.gqmr` 工程容器、原子保存和基础编辑命令。
-2. 实现 PySide6 GUI MVP，复用当前 CLI 核心导入/重定向/导出路径。
-3. 在冻结依赖环境跑原版 Isaac Lab v2.3.2 `MotionLoader`。
-4. 继续 MuJoCo 流式协议、视频姿态插件和高质量求解器。
+单目三维提升仍按冻结计划保持为实验能力，GQMR 不内置或伪称提供可靠的通用独眼动物三维模型。

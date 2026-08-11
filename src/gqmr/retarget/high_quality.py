@@ -25,6 +25,7 @@ class HighQualityRetargetConfig:
     residual_tolerance: float = 0.03
     unreachable_residual: float = 0.10
     minimum_foot_height: float = 0.02
+    avoid_self_collision: bool = True
 
     def __post_init__(self) -> None:
         values = (
@@ -143,6 +144,25 @@ def retarget_high_quality(
                 fast_motion.root_rotation[frame],
                 current_q,
             )
+            if config.avoid_self_collision and robot.collision_metrics()[0] > 0:
+                default_q = np.asarray(
+                    robot.config.default_dof_position, dtype=np.float64
+                )
+                for blend in np.linspace(0.1, 1.0, 10):
+                    candidate = np.clip(
+                        (1.0 - blend) * current_q + blend * default_q,
+                        lower,
+                        upper,
+                    )
+                    robot.set_pose(
+                        fast_motion.root_position[frame],
+                        fast_motion.root_rotation[frame],
+                        candidate,
+                    )
+                    if robot.collision_metrics()[0] == 0:
+                        current_q = candidate
+                        q[frame] = candidate
+                        break
             achieved[frame] = robot.foot_positions()
             iterations[frame] = max(iterations[frame], iteration)
 

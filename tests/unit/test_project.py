@@ -5,7 +5,14 @@ from pathlib import Path
 
 import pytest
 
-from gqmr.project import add_resource, load_project, new_project, pack_project, save_project
+from gqmr.project import (
+    add_resource,
+    load_project,
+    materialize_resource,
+    new_project,
+    pack_project,
+    save_project,
+)
 from gqmr.project.model import ProjectError
 
 
@@ -30,6 +37,10 @@ def test_project_save_load_backup_and_portable_pack(tmp_path: Path) -> None:
     assert packed_resource.uri.startswith("embedded/")
     with zipfile.ZipFile(packed_path) as archive:
         assert archive.read(packed_resource.uri) == resource.read_bytes()
+    materialized = materialize_resource(
+        packed_path, packed, packed.active_animal_motion, cache_dir=tmp_path / "cache"
+    )
+    assert materialized.read_bytes() == resource.read_bytes()
 
 
 def test_project_loader_rejects_path_traversal(tmp_path: Path) -> None:
@@ -41,3 +52,21 @@ def test_project_loader_rejects_path_traversal(tmp_path: Path) -> None:
 
     with pytest.raises(ProjectError, match="unsafe project member"):
         load_project(destination)
+
+
+def test_project_loader_rejects_corrupted_embedded_resource(tmp_path: Path) -> None:
+    resource = tmp_path / "input.bin"
+    resource.write_bytes(b"original")
+    project = add_resource(new_project(), resource, make_active="animal")
+    packed_path = tmp_path / "portable.gqmr"
+    pack_project(packed_path, project)
+    with zipfile.ZipFile(packed_path) as source:
+        members = {name: source.read(name) for name in source.namelist()}
+    embedded = next(name for name in members if name.startswith("embedded/"))
+    members[embedded] = b"corrupt!"
+    with zipfile.ZipFile(packed_path, "w") as destination:
+        for name, payload in members.items():
+            destination.writestr(name, payload)
+
+    with pytest.raises(ProjectError, match="hash mismatch"):
+        load_project(packed_path)
