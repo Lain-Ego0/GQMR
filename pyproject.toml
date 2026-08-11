@@ -12,6 +12,8 @@ license = { file = "LICENSE" }
 authors = [{ name = "GQMR contributors" }]
 dependencies = [
   "numpy>=2.5,<2.6",
+  "platformdirs>=4.4,<5",
+  "mujoco>=3.11,<3.12",
   "scipy>=1.18,<1.19",
 ]
 
@@ -34,4 +36,3 @@ exclude = [
 addopts = "-ra"
 testpaths = ["tests"]
 pythonpath = ["src"]
-

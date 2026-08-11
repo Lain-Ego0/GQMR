@@ -27,3 +27,12 @@ def test_validate_cli_reports_structured_error(tmp_path: Path, capsys) -> None:
     assert result == 2
     assert output["valid"] is False
     assert output["error_type"] == "UnsafeMotionFileError"
+
+
+def test_assets_status_cli_reports_missing(tmp_path: Path, capsys) -> None:
+    result = main(
+        ["assets", "status", "unitree-go2", "--cache-dir", str(tmp_path)]
+    )
+    output = json.loads(capsys.readouterr().out)
+    assert result == 1
+    assert output["assets"][0]["state"] == "missing"

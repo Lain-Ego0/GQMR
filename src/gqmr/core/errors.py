@@ -19,3 +19,6 @@ class MotionValidationError(GQMRError, ValueError):
 class UnsafeMotionFileError(GQMRError, ValueError):
     """Raised before or during loading of an unsafe NPZ container."""
 
+
+class AssetError(GQMRError, ValueError):
+    """Raised when an asset cannot be trusted, installed, or verified."""

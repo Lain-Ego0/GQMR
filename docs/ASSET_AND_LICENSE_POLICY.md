@@ -24,6 +24,8 @@ Models:     unitree_robots/go2, unitree_robots/b2
 - `gqmr assets pack` 生成带 manifest 和许可证的离线包；`unpack` 重复校验。
 - 发布包和 UI 不得暗示 Unitree 对 GQMR 的认可或背书。
 
+manifest、`model_sha256` 和离线包的当前机器可读定义见 [ASSET_MANIFEST_V1.md](ASSET_MANIFEST_V1.md)。
+
 升级上游资产必须：
 
 1. 更新提交和 manifest。
@@ -67,4 +69,3 @@ A1、Laikago、Vision60 当前只存在指向 `pybullet_data` 的历史配置。
 - 工程打包前显示将要嵌入的外部资产清单。
 - 第三方姿态插件是受信任代码，安装和首次启用时显示包名、版本和来源。
 - NPZ 一律禁用 pickle；YAML 使用 safe loader；ZIP 工程解包防止路径穿越和压缩炸弹。
-

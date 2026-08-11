@@ -538,7 +538,7 @@ gqmr export robot.npz --format isaaclab_amp_v232 --output amp.npz
 ### 迭代 1：资产和 schema
 
 - [ ] 建立项目包、锁文件和 CI。（项目包与 CLI 骨架已完成；`uv.lock`、CI 待完成）
-- [ ] 实现固定提交 Unitree 资产安装器和 manifest。
+- [x] 实现固定提交 Unitree 资产安装器和 manifest。
 - [ ] 建立 Go2/B2 配置、加载和 FK/Jacobian 测试。
 - [x] 实现 `AnimalMotion v1`、`RobotMotion v1` 和安全 NPZ I/O。
 - [ ] 将 27 点数据转换为具名 dog-27 配置。

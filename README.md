@@ -15,3 +15,12 @@ PYTHONPATH=src python -m gqmr.cli.main --version
 PYTHONPATH=src python -m gqmr.cli.main validate motion.robot.npz \
   --model-sha256 <sha256>
 ```
+
+Unitree 资产命令：
+
+```bash
+PYTHONPATH=src python -m gqmr assets status
+PYTHONPATH=src python -m gqmr assets install unitree-go2
+PYTHONPATH=src python -m gqmr assets pack unitree-go2 go2.gqmr-assets
+PYTHONPATH=src python -m gqmr assets unpack go2.gqmr-assets
+```

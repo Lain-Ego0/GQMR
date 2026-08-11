@@ -44,12 +44,24 @@ gqmr validate <motion.npz> [--model-sha256 SHA256]
 - RobotMotion 保存时修正相邻有限四元数的符号跳变。
 - 保存使用同目录临时文件、文件 `fsync`、原子替换和目录 `fsync`；失败时清理临时文件。
 
+### 1.5 Unitree 资产供应链
+
+- 内置 Go2/B2 固定提交逐文件 manifest，官方归档 SHA-256 为 `824a51b228c317348866180b1214ed736621d2163006d682156d54b6a55da711`。
+- Go2 只安装许可证、2 个 XML 和 16 个 OBJ，共 19 个文件、28,427,057 bytes。
+- B2 只安装许可证、2 个 XML 和 31 个 mesh，共 34 个文件、31,573,113 bytes。
+- 预览图、terrain scene、height field 和其他上游仓库内容不会进入默认资产缓存或离线包。
+- 实现 `assets install/status/pack/unpack`，支持显式缓存目录、预下载归档、损坏缓存修复和离线部署。
+- tar.gz 安装拒绝错误归档 hash、绝对路径、`..`、重复成员、链接/特殊文件、超量成员和异常解压体积，只提取 manifest 声明的文件。
+- 离线 ZIP64 包再次校验固定内置 manifest、成员集合、逐文件 hash、路径、文件类型、压缩比和解压总量。
+- 安装状态会报告来源提交、许可证、精确大小、`model_sha256`、缺失、损坏和意外文件。
+- `model_sha256` 定义为 XML/mesh 文件清单的确定性聚合 hash；许可证保留在逐文件完整性校验中，但不改变机器人模型身份。完整算法见 `ASSET_MANIFEST_V1.md`。
+
 ## 2. 自动验证结果
 
 当前环境：Python 3.12.3、NumPy 1.26.4、SciPy 1.11.4、pytest 7.4.4。
 
 ```text
-21 passed
+27 passed
 python -m compileall: passed
 CLI version smoke test: gqmr 0.0.1
 ```
@@ -67,6 +79,16 @@ CLI version smoke test: gqmr 0.0.1
 | DAT-003 | 部分完成 | 调用方提供预期模型 hash 时强制匹配；资产配置自动绑定待实现 |
 | DAT-004 | 部分完成 | 数据层阻止严重失败状态成为有效帧；导出器尚未实现 |
 
+真实上游集成验证：
+
+| 项目 | 结果 |
+|---|---|
+| 固定归档下载与归档 SHA-256 | 通过 |
+| Go2 逐文件安装和状态复验 | 通过，`model_sha256=48baeb791c25c3fdaca0163c614145ade0e29d710ee9fcce9d8a5f551e3ca2e1` |
+| B2 逐文件安装和状态复验 | 通过，`model_sha256=2ebeb90cb3cee67b4ae37e719244454b854719db126d9394ed89d3f0c9ec76e5` |
+| Go2 离线 pack/unpack | 通过，解包后逐文件复验通过 |
+| MuJoCo 加载 | Go2/B2 均通过；`nq=19`、`nv=18`、`nu=12` |
+
 这里的“通过”只代表当前开发环境的自动测试。正式发布结论仍需在冻结依赖和参考机上运行完整验收，不提前替代发布验收报告。
 
 ## 3. 实施中发现的问题
@@ -78,11 +100,10 @@ CLI version smoke test: gqmr 0.0.1
 - 影响：`uv.lock`、wheel/sdist 构建和“干净环境单命令安装”尚不能声明完成。
 - 处理：下一步在具备 `uv` 和包索引访问的构建环境生成锁文件，安装冻结版本后重跑全部测试；不得手工伪造 lock。
 
-### ISSUE-002：模型绑定还缺可信资产来源
+### ISSUE-002：模型绑定还缺可信资产来源（已解决）
 
-- 数据加载器已支持预期模型 hash 校验，但 Unitree 固定提交资产安装器、逐文件 manifest 和机器人配置尚未落地。
-- 影响：CLI 目前只能接收显式 `--model-sha256`，还不能通过 `--robot unitree-go2` 自动解析可信 hash；因此 DAT-003 只部分完成。
-- 处理：优先实现资产 manifest、安装/状态命令及 Go2/B2 配置，再把 `validate --robot` 接到同一校验路径。
+- 固定提交资产安装器、Go2/B2 逐文件 manifest 和可信 `model_sha256` 已落地。
+- 剩余工作：机器人 YAML 配置和 `validate --robot` 尚未接入，因此 DAT-003 仍是部分完成，但不再缺资产可信根。
 
 ### ISSUE-003：当前没有可发布的机器人闭环
 
@@ -90,9 +111,15 @@ CLI version smoke test: gqmr 0.0.1
 - 影响：FK/Jacobian、快速 IK、MuJoCo 回放和 AMP 往返尚无可信发布证据。
 - 处理：建立 MIT 合成骨架/动作和固定上游 Unitree 资产后，再开始重定向纵向闭环。
 
+### ISSUE-004：本机 MuJoCo 版本不是冻结发布基线
+
+- 本机可用 MuJoCo 为 3.8.0；冻结运行环境指定 MuJoCo 3.11 系列。
+- 本轮真实 Go2/B2 加载结果与计划中的技术验证数据一致，但只能算资产兼容性预验证。
+- `pyproject.toml` 已声明 `mujoco>=3.11,<3.12`。生成 `uv.lock` 后必须在 3.11 系列重跑加载、FK、Jacobian、接触和 AMP 往返，才能形成发布证据。
+
 ## 4. 下一步顺序
 
-1. 实现 Unitree 固定提交资产 manifest、安装、状态、pack/unpack 安全校验。
-2. 建立 Go2/B2 YAML 配置和 MuJoCo 名称解析，完成独立 FK/Jacobian golden。
+1. 建立 Go2/B2 YAML 配置和 MuJoCo 名称解析，完成独立 FK/Jacobian golden。
+2. 将 `validate --robot` 连接到资产目录和机器人配置，完成 DAT-003 自动绑定。
 3. 固化 dog-27 骨架与旧 27 点读取器，生成 MIT 合成 walk/trot/pace/turn。
 4. 在上述可信底座上实现 Go2 快速 IK，而不是直接依赖历史 PyBullet 路径。
