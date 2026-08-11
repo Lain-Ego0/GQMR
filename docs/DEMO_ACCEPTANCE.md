@@ -30,7 +30,7 @@ uv run gqmr gui
 | 动力学演示 | 250 步完成，无跌倒时间；结果明确标记为诊断 PD 跟踪 |
 | 导出 | DeepMimic JSON、Isaac Lab AMP NPZ 均成功 |
 | portable 工程 | 两个资源均嵌入；原位保存、重复导入去重、再次打包通过 |
-| GUI | clean wheel 环境离屏窗口、预览和事件循环通过 |
+| GUI | Go2/B2 MuJoCo mesh、时间轴姿态、拖动旋转、滚轮缩放及离屏事件循环通过 |
 | 200 Hz 流式 | 60 秒、12000/12000 帧、0 GAP、`199.89 Hz` |
 | 峰值内存 | 60 秒基线最大 RSS `443 MiB` |
 

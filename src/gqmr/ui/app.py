@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
     QFileDialog,
+    QFrame,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
@@ -56,8 +57,9 @@ from gqmr.ui.worker import FunctionTask
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle(f"GQMR {__version__} — Quadruped Motion Studio")
-        self.resize(1280, 780)
+        self.setWindowTitle(f"GQMR {__version__} — 四足动作重定向")
+        self.resize(1440, 900)
+        self.setMinimumSize(1120, 720)
         self.thread_pool = QThreadPool.globalInstance()
         self.active_task: FunctionTask | None = None
         self.animal_motion: AnimalMotion | None = None
@@ -74,92 +76,150 @@ class MainWindow(QMainWindow):
         self._build_ui()
         self._build_menu()
         self._apply_style()
+        QTimer.singleShot(0, self.refresh_robot_preview)
 
     def _build_ui(self) -> None:
         central = QWidget()
+        central.setObjectName("appRoot")
         root_layout = QVBoxLayout(central)
-        title = QLabel("General Quadruped Motion Retargeting")
-        title.setObjectName("title")
-        subtitle = QLabel("导入动物骨架 → MuJoCo 重定向 → 质量检查 → AMP 导出")
-        subtitle.setObjectName("subtitle")
-        root_layout.addWidget(title)
-        root_layout.addWidget(subtitle)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setSpacing(0)
+
+        header = QFrame()
+        header.setObjectName("topBar")
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(24, 14, 24, 14)
+        header_layout.setSpacing(14)
+        brand = QLabel("GQMR")
+        brand.setObjectName("brand")
+        product = QLabel("四足动作重定向工作台")
+        product.setObjectName("productName")
+        self.project_label = QLabel("未保存工程")
+        self.project_label.setObjectName("projectState")
+        header_layout.addWidget(brand)
+        header_layout.addWidget(product)
+        header_layout.addStretch(1)
+        header_layout.addWidget(self.project_label)
+        root_layout.addWidget(header)
 
         splitter = QSplitter(Qt.Horizontal)
-        controls = QWidget()
-        controls.setMinimumWidth(280)
-        controls.setMaximumWidth(360)
+        splitter.setObjectName("workspaceSplitter")
+        splitter.setHandleWidth(1)
+        controls = QFrame()
+        controls.setObjectName("sidebar")
+        controls.setMinimumWidth(300)
+        controls.setMaximumWidth(340)
         controls_layout = QVBoxLayout(controls)
+        controls_layout.setContentsMargins(18, 18, 18, 18)
+        controls_layout.setSpacing(14)
 
-        source_group = QGroupBox("1. 动物运动")
+        source_group = QGroupBox("输入动作")
         source_layout = QVBoxLayout(source_group)
+        source_layout.setSpacing(10)
         source_buttons = QHBoxLayout()
-        self.demo_button = QPushButton("生成 MIT 演示")
-        self.import_button = QPushButton("导入文件")
+        self.demo_button = QPushButton("使用示例")
+        self.import_button = QPushButton("导入动作…")
         source_buttons.addWidget(self.demo_button)
         source_buttons.addWidget(self.import_button)
-        self.source_label = QLabel("尚未加载")
+        self.source_label = QLabel("尚未载入动作")
+        self.source_label.setObjectName("sourceStatus")
         self.source_label.setWordWrap(True)
         source_layout.addLayout(source_buttons)
         source_layout.addWidget(self.source_label)
         controls_layout.addWidget(source_group)
 
-        retarget_group = QGroupBox("2. 目标机器人")
+        retarget_group = QGroupBox("机器人与求解")
         retarget_layout = QFormLayout(retarget_group)
+        retarget_layout.setContentsMargins(14, 18, 14, 14)
+        retarget_layout.setHorizontalSpacing(10)
+        retarget_layout.setVerticalSpacing(10)
         self.robot_combo = QComboBox()
-        self.robot_combo.addItems(["unitree-go2", "unitree-b2"])
+        self.robot_combo.addItem("Unitree Go2", "unitree-go2")
+        self.robot_combo.addItem("Unitree B2", "unitree-b2")
         self.retarget_mode = QComboBox()
-        self.retarget_mode.addItems(["快速 DLS", "高质量接触锁定"])
+        self.retarget_mode.addItem("快速（适合预览）", "fast")
+        self.retarget_mode.addItem("高质量（接触优化）", "high-quality")
         self.cache_edit = QLineEdit()
-        self.cache_edit.setPlaceholderText("留空使用 GQMR 默认资产缓存")
-        self.retarget_button = QPushButton("运行快速 DLS 重定向")
-        self.cancel_button = QPushButton("取消任务")
+        self.cache_edit.setPlaceholderText("使用默认资产目录")
+        self.retarget_button = QPushButton("开始重定向")
+        self.retarget_button.setObjectName("primaryButton")
+        self.cancel_button = QPushButton("停止任务")
         self.cancel_button.setEnabled(False)
-        retarget_layout.addRow("机器人", self.robot_combo)
-        retarget_layout.addRow("求解模式", self.retarget_mode)
-        retarget_layout.addRow("资产缓存", self.cache_edit)
+        self.model_status = QLabel("模型尚未加载")
+        self.model_status.setObjectName("modelStatus")
+        self.model_status.setWordWrap(True)
+        retarget_layout.addRow("目标型号", self.robot_combo)
+        retarget_layout.addRow("处理方式", self.retarget_mode)
+        retarget_layout.addRow("资产目录", self.cache_edit)
+        retarget_layout.addRow(self.model_status)
         retarget_layout.addRow(self.retarget_button)
         retarget_layout.addRow(self.cancel_button)
         controls_layout.addWidget(retarget_group)
 
-        export_group = QGroupBox("3. 验证与导出")
+        export_group = QGroupBox("检查与输出")
         export_layout = QFormLayout(export_group)
+        export_layout.setContentsMargins(14, 18, 14, 14)
+        export_layout.setHorizontalSpacing(10)
+        export_layout.setVerticalSpacing(10)
         self.format_combo = QComboBox()
-        self.format_combo.addItems(["isaaclab_amp_v232", "canonical", "deepmimic"])
-        self.quality_button = QPushButton("运行 MuJoCo 质量检查")
-        self.export_button = QPushButton("导出结果")
-        export_layout.addRow("格式", self.format_combo)
+        self.format_combo.addItem("Isaac Lab AMP", "isaaclab_amp_v232")
+        self.format_combo.addItem("GQMR 标准 NPZ", "canonical")
+        self.format_combo.addItem("DeepMimic JSON", "deepmimic")
+        self.quality_button = QPushButton("生成质量报告")
+        self.export_button = QPushButton("导出…")
+        export_layout.addRow("输出格式", self.format_combo)
         export_layout.addRow(self.quality_button)
         export_layout.addRow(self.export_button)
         controls_layout.addWidget(export_group)
         controls_layout.addStretch(1)
 
         center = QWidget()
+        center.setObjectName("workspace")
         center_layout = QVBoxLayout(center)
+        center_layout.setContentsMargins(20, 18, 20, 18)
+        center_layout.setSpacing(12)
+        preview_header = QHBoxLayout()
+        preview_title = QLabel("动作预览")
+        preview_title.setObjectName("sectionTitle")
+        self.preview_status = QLabel("拖动模型可旋转，滚轮可缩放")
+        self.preview_status.setObjectName("previewHint")
+        preview_header.addWidget(preview_title)
+        preview_header.addStretch(1)
+        preview_header.addWidget(self.preview_status)
         self.preview = MotionPreview()
-        playback = QHBoxLayout()
+        playback_panel = QFrame()
+        playback_panel.setObjectName("playbackBar")
+        playback = QHBoxLayout(playback_panel)
+        playback.setContentsMargins(10, 8, 12, 8)
         self.play_button = QPushButton("播放")
+        self.play_button.setObjectName("playButton")
         self.frame_slider = QSlider(Qt.Horizontal)
         self.frame_slider.setRange(0, 0)
         self.frame_label = QLabel("0 / 0")
+        self.frame_label.setObjectName("frameCounter")
         playback.addWidget(self.play_button)
         playback.addWidget(self.frame_slider, 1)
         playback.addWidget(self.frame_label)
-        center_layout.addWidget(self.preview, 1)
-        center_layout.addLayout(playback)
-
-        report_panel = QWidget()
-        report_panel.setMinimumWidth(300)
-        report_layout = QVBoxLayout(report_panel)
-        report_layout.addWidget(QLabel("质量报告 / 任务日志"))
+        report_header = QHBoxLayout()
+        report_title = QLabel("运行记录")
+        report_title.setObjectName("sectionTitle")
+        report_header.addWidget(report_title)
+        report_header.addStretch(1)
         self.report = QTextEdit()
+        self.report.setObjectName("reportView")
         self.report.setReadOnly(True)
-        report_layout.addWidget(self.report)
+        self.report.setMaximumHeight(190)
+        self.report.setPlaceholderText("质量报告、导出结果和错误信息会显示在这里。")
+        center_layout.addLayout(preview_header)
+        center_layout.addWidget(self.preview, 1)
+        center_layout.addWidget(playback_panel)
+        center_layout.addLayout(report_header)
+        center_layout.addWidget(self.report)
 
         splitter.addWidget(controls)
         splitter.addWidget(center)
-        splitter.addWidget(report_panel)
         splitter.setStretchFactor(1, 1)
+        splitter.setSizes([320, 1120])
         root_layout.addWidget(splitter, 1)
         self.setCentralWidget(central)
         self.setStatusBar(QStatusBar())
@@ -172,6 +232,10 @@ class MainWindow(QMainWindow):
         self.export_button.clicked.connect(self.export_motion)
         self.play_button.clicked.connect(self.toggle_playback)
         self.frame_slider.valueChanged.connect(self.set_frame)
+        self.robot_combo.currentIndexChanged.connect(
+            lambda _: self.refresh_robot_preview()
+        )
+        self.cache_edit.editingFinished.connect(self.refresh_robot_preview)
         self._update_enabled()
 
     def _build_menu(self) -> None:
@@ -220,23 +284,197 @@ class MainWindow(QMainWindow):
     def _apply_style(self) -> None:
         self.setStyleSheet(
             """
-            QMainWindow, QWidget { background: #0f172a; color: #e2e8f0; font-size: 13px; }
-            QLabel#title { font-size: 25px; font-weight: 700; color: #f8fafc; }
-            QLabel#subtitle { color: #94a3b8; margin-bottom: 8px; }
-            QGroupBox { border: 1px solid #334155; border-radius: 9px; margin-top: 12px; padding-top: 12px; font-weight: 600; }
-            QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 5px; }
-            QPushButton { background: #1e293b; border: 1px solid #475569; border-radius: 6px; padding: 8px; }
-            QPushButton:hover { background: #334155; }
-            QPushButton:disabled { color: #64748b; background: #172033; }
-            QLineEdit, QComboBox, QTextEdit { background: #111827; border: 1px solid #334155; border-radius: 5px; padding: 6px; }
-            QSlider::groove:horizontal { height: 5px; background: #334155; }
-            QSlider::handle:horizontal { width: 14px; margin: -5px 0; border-radius: 7px; background: #38bdf8; }
+            * {
+                font-family: "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
+                font-size: 14px;
+                color: #292724;
+            }
+            QMainWindow, QWidget#appRoot, QWidget#workspace {
+                background: #f4f1eb;
+            }
+            QFrame#topBar {
+                background: #ffffff;
+                border-bottom: 1px solid #d8d3ca;
+            }
+            QLabel#brand {
+                font-size: 22px;
+                font-weight: 750;
+                letter-spacing: 1px;
+                color: #252422;
+            }
+            QLabel#productName {
+                font-size: 15px;
+                color: #716d66;
+            }
+            QLabel#projectState {
+                padding: 5px 10px;
+                border: 1px solid #d8d3ca;
+                border-radius: 3px;
+                background: #faf9f6;
+                color: #625e57;
+            }
+            QFrame#sidebar {
+                background: #ebe7df;
+                border-right: 1px solid #d8d3ca;
+            }
+            QGroupBox {
+                background: #ffffff;
+                border: 1px solid #d3cec5;
+                border-radius: 4px;
+                margin-top: 13px;
+                padding-top: 9px;
+                font-size: 15px;
+                font-weight: 650;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px;
+                color: #34312d;
+            }
+            QLabel#sourceStatus, QLabel#modelStatus {
+                background: #f7f5f0;
+                border-left: 3px solid #b8522f;
+                padding: 9px 10px;
+                color: #4e4a44;
+                line-height: 1.35;
+            }
+            QLabel#sectionTitle {
+                font-size: 17px;
+                font-weight: 700;
+                color: #252422;
+            }
+            QLabel#previewHint {
+                color: #716d66;
+            }
+            QPushButton {
+                min-height: 34px;
+                padding: 4px 12px;
+                background: #ffffff;
+                border: 1px solid #bdb7ad;
+                border-radius: 4px;
+                color: #302d29;
+                font-weight: 550;
+            }
+            QPushButton:hover {
+                background: #f4f1eb;
+                border-color: #908980;
+            }
+            QPushButton:pressed {
+                background: #e5e0d7;
+            }
+            QPushButton:disabled {
+                color: #aaa49b;
+                background: #f1eee8;
+                border-color: #d9d4cb;
+            }
+            QPushButton#primaryButton {
+                background: #b8522f;
+                border-color: #9e4325;
+                color: #ffffff;
+                font-weight: 700;
+            }
+            QPushButton#primaryButton:hover {
+                background: #a64829;
+            }
+            QPushButton#playButton {
+                min-width: 72px;
+                background: #34312d;
+                border-color: #34312d;
+                color: #ffffff;
+            }
+            QLineEdit, QComboBox {
+                min-height: 32px;
+                padding: 2px 8px;
+                background: #ffffff;
+                border: 1px solid #bdb7ad;
+                border-radius: 3px;
+                selection-background-color: #d9a58f;
+            }
+            QLineEdit:focus, QComboBox:focus {
+                border: 1px solid #b8522f;
+            }
+            QComboBox::drop-down {
+                width: 24px;
+                border: none;
+            }
+            QFrame#playbackBar {
+                background: #ffffff;
+                border: 1px solid #d8d3ca;
+                border-radius: 4px;
+            }
+            QLabel#frameCounter {
+                min-width: 72px;
+                color: #4e4a44;
+            }
+            QTextEdit#reportView {
+                background: #ffffff;
+                border: 1px solid #d8d3ca;
+                border-radius: 4px;
+                padding: 9px;
+                color: #34312d;
+                font-family: "Noto Sans Mono CJK SC", "DejaVu Sans Mono", monospace;
+                font-size: 13px;
+                selection-background-color: #d9a58f;
+            }
+            QSlider::groove:horizontal {
+                height: 4px;
+                background: #d4cfc6;
+                border-radius: 2px;
+            }
+            QSlider::sub-page:horizontal {
+                background: #b8522f;
+                border-radius: 2px;
+            }
+            QSlider::handle:horizontal {
+                width: 16px;
+                margin: -6px 0;
+                border-radius: 8px;
+                background: #ffffff;
+                border: 2px solid #b8522f;
+            }
+            QMenuBar {
+                background: #ffffff;
+                border-bottom: 1px solid #d8d3ca;
+                padding: 2px 8px;
+            }
+            QMenuBar::item:selected, QMenu::item:selected {
+                background: #eee9e1;
+            }
+            QMenu {
+                background: #ffffff;
+                border: 1px solid #cfc9bf;
+            }
+            QStatusBar {
+                background: #ffffff;
+                border-top: 1px solid #d8d3ca;
+                color: #625e57;
+            }
             """
         )
 
     def _cache_dir(self) -> Path | None:
         text = self.cache_edit.text().strip()
         return Path(text) if text else None
+
+    def _selected_robot_id(self) -> str:
+        return str(self.robot_combo.currentData())
+
+    def refresh_robot_preview(self) -> None:
+        robot_id = self._selected_robot_id()
+        display_name = self.robot_combo.currentText()
+        self.model_status.setText(f"正在加载 {display_name}…")
+        try:
+            robot = load_robot_model(robot_id, cache_dir=self._cache_dir())
+            self.preview.set_robot_model(robot)
+            self.model_status.setText(
+                f"{display_name} 已加载\n模型、网格与哈希校验通过"
+            )
+            self.preview_status.setText("拖动模型可旋转，滚轮可缩放")
+        except Exception as error:
+            self.preview.set_robot_model(None, error=str(error))
+            self.model_status.setText(f"{display_name} 不可用\n{error}")
+            self.preview_status.setText("请先安装或修复机器人资产")
 
     def _log(self, value) -> None:
         if isinstance(value, str):
@@ -259,8 +497,11 @@ class MainWindow(QMainWindow):
         self.diagnostics = None
         self.edit_stack = EditStack(motion)
         self.edit_target = "animal"
+        source_name = path.name if path is not None else motion.metadata["source"].get(
+            "gait", "内存动作"
+        )
         self.source_label.setText(
-            f"{path or motion.metadata['source'].get('gait', 'memory')}\n{motion.frame_count} 帧 / {motion.duration:.3f} s"
+            f"{source_name}\n{motion.frame_count} 帧 · {motion.duration:.3f} 秒"
         )
         self.preview.set_motion(motion)
         self.frame_slider.setRange(0, motion.frame_count - 1)
@@ -313,7 +554,7 @@ class MainWindow(QMainWindow):
         if self.animal_motion is None:
             return
         animal = self.animal_motion
-        robot_id = self.robot_combo.currentText()
+        robot_id = self._selected_robot_id()
         cache = self._cache_dir()
         high_quality = self.retarget_mode.currentIndex() == 1
 
@@ -332,6 +573,7 @@ class MainWindow(QMainWindow):
             self.diagnostics = diagnostics
             self.edit_stack = EditStack(motion)
             self.edit_target = "robot"
+            self.preview.set_robot_model(robot)
             self.preview.set_motion(self.animal_motion, motion, diagnostics)
             self.frame_slider.setRange(0, motion.frame_count - 1)
             self._log(replay_quality_report(motion, robot))
@@ -343,7 +585,7 @@ class MainWindow(QMainWindow):
         if self.robot_motion is None:
             return
         motion = self.robot_motion
-        robot_id = self.robot_combo.currentText()
+        robot_id = self._selected_robot_id()
         cache = self._cache_dir()
         self._run_task(
             lambda token: replay_quality_report(
@@ -355,14 +597,14 @@ class MainWindow(QMainWindow):
     def export_motion(self) -> None:
         if self.robot_motion is None:
             return
-        format_name = self.format_combo.currentText()
+        format_name = str(self.format_combo.currentData())
         suffix = ".json" if format_name == "deepmimic" else ".npz"
         filename, _ = QFileDialog.getSaveFileName(self, "导出", f"motion{suffix}")
         if not filename:
             return
         destination = Path(filename)
         motion = self.robot_motion
-        robot_id = self.robot_combo.currentText()
+        robot_id = self._selected_robot_id()
         cache = self._cache_dir()
 
         def work(token):
@@ -504,6 +746,7 @@ class MainWindow(QMainWindow):
     def new_project(self) -> None:
         self.project = new_project()
         self.project_path = None
+        self.project_label.setText("未保存工程")
         self.statusBar().showMessage("已新建工程", 3000)
 
     def open_project(self) -> None:
@@ -513,6 +756,7 @@ class MainWindow(QMainWindow):
         try:
             self.project = load_project(filename)
             self.project_path = Path(filename)
+            self.project_label.setText(self.project_path.name)
             active = self.project.active_animal_motion
             if active is not None:
                 resource_path = materialize_resource(
@@ -528,6 +772,9 @@ class MainWindow(QMainWindow):
                 )
                 motion = load_motion(resource_path)
                 if isinstance(motion, RobotMotion):
+                    robot_index = self.robot_combo.findData(motion.metadata["model_id"])
+                    if robot_index >= 0:
+                        self.robot_combo.setCurrentIndex(robot_index)
                     self.robot_motion = motion
                     self.robot_path = resource_path
                     self.edit_stack = EditStack(motion)
@@ -569,6 +816,7 @@ class MainWindow(QMainWindow):
                 project = add_resource(project, self.robot_path, make_active="robot")
             save_project(self.project_path, project, source_path=self.project_path)
             self.project = project
+            self.project_label.setText(self.project_path.name)
             self.statusBar().showMessage(f"已保存 {self.project_path}", 4000)
         except Exception as error:
             QMessageBox.critical(self, "保存失败", str(error))
@@ -577,6 +825,7 @@ class MainWindow(QMainWindow):
         if self.active_task is not None:
             self.active_task.token.cancel()
             self.thread_pool.waitForDone(2000)
+        self.preview.close_renderer()
         event.accept()
 
     def pack_current_project(self) -> None:

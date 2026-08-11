@@ -62,7 +62,8 @@
 - ZIP64 项目加载拒绝路径穿越、重复/加密/意外成员、超量和异常压缩；嵌入资源会复验 size/hash。
 - 普通保存保留一份 `.bak`，portable pack 嵌入选中资源；嵌入工程可原位保存和再次打包，不会把物化缓存副本误登记为外部资源。
 - 物化缓存命中会同时复验 size 和 SHA-256；同尺寸篡改会从 portable 工程重新提取。
-- PySide6 GUI 实现导入/合成、Go2/B2 选择、快速/高质量后台任务、取消、动物/机器人时间线预览、质量日志、编辑/撤销/重做、工程和三种导出。
+- PySide6 GUI 实现导入/合成、Go2/B2 选择、快速/高质量后台任务、取消、质量日志、编辑/撤销/重做、工程和三种导出。
+- 预览区使用 MuJoCo 真实 mesh 渲染 Go2/B2，随时间轴更新根姿态和 12 DOF，支持拖动旋转与滚轮缩放；界面采用中性浅色桌面工具布局，不再使用深蓝三栏控制台样式。
 - 已生成可展示截图 `docs/images/gqmr-gui.png`。
 
 ### 1.8 MuJoCo Stream Protocol v1
@@ -112,7 +113,7 @@ GQMR_TEST_ASSET_CACHE=<verified-cache> uv run --frozen pytest -q
 结果：
 
 ```text
-100 passed
+101 passed
 python -m compileall: passed
 wheel + sdist: passed
 clean temporary venv wheel install: passed

@@ -9,6 +9,8 @@ General Quadruped Motion Retargeting
 
 当前已实现 Motion Schema v1、安全 NPZ I/O、Unitree 可信资产、dog-27 输入、Go2/B2 快速与高质量重定向、MuJoCo 回放、AMP/DeepMimic 导出、`.gqmr` 工程、PySide6 GUI、流式录制、通用/DLC/SLEAP 姿态文件和多目三角化。实际完成度、验证结果与已知问题见 [实施状态](docs/IMPLEMENTATION_STATUS.md)。
 
+GUI 会直接渲染 Go2/B2 的 MuJoCo mesh，并随时间轴更新机器人姿态；在模型区域拖动可旋转视角，滚轮可缩放。
+
 使用已提交的锁文件安装：
 
 ```bash
