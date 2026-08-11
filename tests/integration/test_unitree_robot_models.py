@@ -15,6 +15,12 @@ from gqmr.exporters.isaaclab_amp import export_isaaclab_amp_v232
 from gqmr.retarget import replay_quality_report, retarget_fast
 from gqmr.robots import LEG_ORDER, load_robot_model
 from gqmr.synthetic import generate_dog27_motion
+from gqmr.stream import (
+    GQMRPublisher,
+    GQMRRecorder,
+    StreamProtocolError,
+    build_robot_welcome,
+)
 
 
 def _asset_cache() -> Path:
@@ -292,3 +298,86 @@ def test_isaaclab_amp_export_fk_roundtrip(tmp_path: Path, robot_id: str) -> None
             )
     assert maximum_position_error < 1e-5
     assert maximum_rotation_error < 1e-5
+
+
+def test_mujoco_stream_protocol_records_canonical_robot_motion() -> None:
+    robot = load_robot_model("unitree-go2", cache_dir=_asset_cache())
+    welcome = build_robot_welcome(robot, nominal_hz=200.0)
+    publisher = GQMRPublisher(
+        welcome, endpoint="tcp://127.0.0.1:*", ring_size=512
+    ).start()
+    recorder = GQMRRecorder(publisher.bound_endpoint, credit=256)
+    try:
+        recorder.connect()
+        recorder.validate_robot(robot)
+        for frame in range(200):
+            phase = 2.0 * np.pi * frame / 200
+            pose = np.asarray(robot.config.default_dof_position) + 0.05 * np.sin(phase)
+            robot.set_pose(
+                [frame * 0.001, 0.0, robot.config.default_root_position[2]],
+                robot.config.default_root_rotation,
+                pose,
+            )
+            publisher.publish(
+                {"qpos": robot.data.qpos, "qvel": robot.data.qvel},
+                timestamp_ns=1_000_000_000 + frame * 5_000_000,
+            )
+        capture = recorder.record_frames(200, timeout_ms=5000)
+        motion = capture.to_robot_motion(robot)
+
+        assert capture.gaps == ()
+        assert motion.frame_count == 200
+        assert motion.duration == pytest.approx(0.995)
+        assert np.all(motion.frame_valid)
+        assert np.allclose(motion.root_position[-1, 0], 0.199)
+        assert motion.metadata["retarget_config"]["mode"] == "mujoco_stream_v1"
+    finally:
+        recorder.close()
+        publisher.close()
+
+
+def test_mujoco_stream_reports_ring_overflow_gap() -> None:
+    robot = load_robot_model("unitree-go2", cache_dir=_asset_cache())
+    publisher = GQMRPublisher(
+        build_robot_welcome(robot, nominal_hz=200.0),
+        endpoint="tcp://127.0.0.1:*",
+        ring_size=4,
+    ).start()
+    recorder = GQMRRecorder(publisher.bound_endpoint, credit=1)
+    try:
+        recorder.connect()
+        recorder.validate_robot(robot)
+        publisher.publish(
+            {"qpos": robot.data.qpos, "qvel": robot.data.qvel}, timestamp_ns=1
+        )
+        assert recorder.receive(timeout_ms=3000)
+        for frame in range(1, 20):
+            publisher.publish(
+                {"qpos": robot.data.qpos, "qvel": robot.data.qvel},
+                timestamp_ns=1 + frame,
+            )
+        deadline = 20
+        while not recorder.gaps and deadline:
+            recorder.receive(timeout_ms=3000)
+            deadline -= 1
+        assert recorder.gaps
+        assert recorder.gaps[0]["reason"] == "ring_overflow"
+        assert recorder.gaps[0]["first_missing"] == 1
+    finally:
+        recorder.close()
+        publisher.close()
+
+
+def test_mujoco_stream_rejects_wrong_model_hash() -> None:
+    robot = load_robot_model("unitree-go2", cache_dir=_asset_cache())
+    welcome = build_robot_welcome(robot, nominal_hz=200.0)
+    welcome["model_sha256"] = "0" * 64
+    publisher = GQMRPublisher(welcome, endpoint="tcp://127.0.0.1:*").start()
+    recorder = GQMRRecorder(publisher.bound_endpoint)
+    try:
+        recorder.connect()
+        with pytest.raises(StreamProtocolError, match="model hash"):
+            recorder.validate_robot(robot)
+    finally:
+        recorder.close()
+        publisher.close()

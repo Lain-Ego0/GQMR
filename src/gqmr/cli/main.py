@@ -35,6 +35,7 @@ from gqmr.robots.model import RobotModelError
 from gqmr.skeletons import get_skeleton
 from gqmr.sources.files import inspect_legacy_dog27, load_legacy_dog27
 from gqmr.synthetic import generate_dog27_motion
+from gqmr.stream import GQMRRecorder
 
 
 def _motion_summary(
@@ -76,6 +77,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="gqmr")
     parser.add_argument("--version", action="version", version=f"gqmr {__version__}")
     subparsers = parser.add_subparsers(dest="command", required=True)
+    subparsers.add_parser("gui", help="launch the PySide6 desktop application")
     inspect_parser = subparsers.add_parser(
         "inspect", help="inspect a canonical NPZ or legacy dog-27 text file"
     )
@@ -179,6 +181,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     robot_inspect.add_argument("robot", choices=available_robot_configs())
     robot_inspect.add_argument("--cache-dir", type=Path)
+    stream_parser = subparsers.add_parser("stream", help="record MuJoCo Stream Protocol v1")
+    stream_commands = stream_parser.add_subparsers(dest="stream_command", required=True)
+    stream_record = stream_commands.add_parser("record", help="record qpos/qvel to RobotMotion")
+    stream_record.add_argument("endpoint")
+    stream_record.add_argument("--robot", choices=available_robot_configs(), required=True)
+    stream_record.add_argument("--cache-dir", type=Path)
+    stream_record.add_argument("--frames", type=int, required=True)
+    stream_record.add_argument("--timeout-ms", type=int, default=10000)
+    stream_record.add_argument("--output", type=Path, required=True)
     project_parser = subparsers.add_parser("project", help="manage .gqmr projects")
     project_commands = project_parser.add_subparsers(
         dest="project_command", required=True
@@ -377,9 +388,35 @@ def _run_project(args: argparse.Namespace) -> dict[str, object]:
     return _project_summary(args.destination, packed)
 
 
+def _run_stream(args: argparse.Namespace) -> dict[str, object]:
+    robot = load_robot_model(args.robot, cache_dir=args.cache_dir)
+    recorder = GQMRRecorder(args.endpoint)
+    try:
+        recorder.connect(timeout_ms=args.timeout_ms)
+        recorder.validate_robot(robot)
+        capture = recorder.record_frames(args.frames, timeout_ms=args.timeout_ms)
+        motion = capture.to_robot_motion(robot)
+        save_motion(args.output, motion)
+    finally:
+        recorder.close()
+    return {
+        "endpoint": args.endpoint,
+        "output": str(args.output),
+        "robot_id": args.robot,
+        "frames": motion.frame_count,
+        "valid_frames": int(np.count_nonzero(motion.frame_valid)),
+        "gaps": list(capture.gaps),
+        "session_id": capture.welcome["session_id"],
+    }
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
+        if args.command == "gui":
+            from gqmr.ui.app import main as gui_main
+
+            return gui_main()
         if args.command == "assets":
             result, exit_code = _run_assets(args)
             print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
@@ -390,6 +427,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
         if args.command == "project":
             result = _run_project(args)
+            print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
+            return 0
+        if args.command == "stream":
+            result = _run_stream(args)
             print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
             return 0
         if args.command == "convert":
