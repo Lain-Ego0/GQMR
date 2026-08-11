@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from gqmr.assets import default_asset_root
 from gqmr.cli.main import main
 from gqmr.core.coordinates import quaternion_geodesic_distance
 from gqmr.core.derivatives import angular_velocity_world, linear_velocity
@@ -30,10 +31,10 @@ from gqmr.stream import (
 
 
 def _asset_cache() -> Path:
-    value = os.environ.get("GQMR_TEST_ASSET_CACHE")
-    if not value:
-        pytest.skip("set GQMR_TEST_ASSET_CACHE to a verified Unitree asset cache")
-    return Path(value)
+    value = os.environ.get("GQMR_TEST_ASSET_ROOT") or os.environ.get(
+        "GQMR_TEST_ASSET_CACHE"
+    )
+    return Path(value) if value else default_asset_root()
 
 
 def _rotation_x(angle: float) -> np.ndarray:

@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
 )
 
 from gqmr import __version__
+from gqmr.assets import default_asset_root
 from gqmr.core.io import load_motion, save_motion
 from gqmr.core.motion import AnimalMotion, RobotMotion
 from gqmr.editing import EditStack, filter_robot_motion, make_robot_loop
@@ -141,7 +142,8 @@ class MainWindow(QMainWindow):
         self.retarget_mode.addItem("快速（适合预览）", "fast")
         self.retarget_mode.addItem("高质量（接触优化）", "high-quality")
         self.cache_edit = QLineEdit()
-        self.cache_edit.setPlaceholderText("使用默认资产目录")
+        self.cache_edit.setText(str(default_asset_root()))
+        self.cache_edit.setToolTip("完整机器人模型位于该目录的 assets/ 子目录")
         self.retarget_button = QPushButton("开始重定向")
         self.retarget_button.setObjectName("primaryButton")
         self.cancel_button = QPushButton("停止任务")
@@ -152,7 +154,7 @@ class MainWindow(QMainWindow):
         self.model_status.setMinimumHeight(58)
         retarget_layout.addRow("目标型号", self.robot_combo)
         retarget_layout.addRow("处理方式", self.retarget_mode)
-        retarget_layout.addRow("资产目录", self.cache_edit)
+        retarget_layout.addRow("资产根目录", self.cache_edit)
         retarget_layout.addRow(self.model_status)
         retarget_layout.addRow(self.retarget_button)
         retarget_layout.addRow(self.cancel_button)

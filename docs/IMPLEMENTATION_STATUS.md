@@ -11,7 +11,7 @@
 
 - `pyproject.toml` 和真实 `uv.lock` 已提交，锁定 33 个包。
 - 当前阶段不启用 CI/CD；仓库流水线配置已移除，冻结同步、compileall、pytest、构建和发布扫描由本地发布验收命令执行。
-- Unitree Go2/B2 使用固定提交 `ae6a8403e272733e9996ef59990880330496177f`，实现归档/逐文件 hash、安全安装、状态复验和离线 pack/unpack。
+- Unitree Go2/B2 使用固定提交 `ae6a8403e272733e9996ef59990880330496177f`；完整 XML/mesh/LICENSE 已纳入仓库 `assets/` 并随 wheel 分发，同时保留归档/逐文件 hash、安全修复、状态复验和离线 pack/unpack。
 - wheel 和 sdist 都排除 `motion_imitation` 与 CC BY-NC `*_joint_pos.txt`；每次本地重建发布物后同时扫描两种归档。
 - 已生成第三方许可证清单和 CycloneDX SBOM，GUI 包含 LGPL/Qt “关于”入口。
 
@@ -107,13 +107,13 @@ gqmr gui
 
 ```bash
 env -u PYTHONPATH QT_QPA_PLATFORM=offscreen MUJOCO_GL=egl \
-GQMR_TEST_ASSET_CACHE=<verified-cache> uv run --frozen pytest -q
+uv run --frozen pytest -q
 ```
 
 结果：
 
 ```text
-103 passed
+105 passed
 python -m compileall: passed
 wheel + sdist: passed
 clean temporary venv wheel install: passed

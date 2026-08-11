@@ -13,20 +13,18 @@ GUI 会直接渲染 Go2/B2 的 MuJoCo mesh，并随时间轴更新机器人姿�
 
 ## 启动与使用
 
-使用已提交的锁文件安装，并先安装要显示的机器人资产：
+使用已提交的锁文件安装。仓库 `assets/` 已包含 Go2/B2 完整 MuJoCo 模型和 mesh，无需首次下载：
 
 ```bash
 uv sync --frozen --extra test
 uv run gqmr --version
-uv run gqmr assets install unitree-go2
-uv run gqmr assets install unitree-b2
 uv run gqmr assets status
 uv run gqmr gui
 ```
 
 GUI 中点击“使用示例”，选择 Go2 或 B2，并将“处理方式”切换为“高质量（接触优化）”，再点击“开始重定向”。预览区显示真实 MuJoCo mesh；拖动旋转视角，滚轮缩放，底部时间轴查看各步态相位。
 
-如果 Go2/B2 区域为空或提示资产不可用，先执行上面的 `assets install`/`assets status`。默认资产目录由 `platformdirs` 管理，Linux 通常是 `~/.cache/gqmr`；使用自定义目录时，安装命令和 GUI“资产目录”必须填写同一路径。
+默认资产根目录是仓库根目录，完整模型位于 `GQMR/assets/<asset_id>/<commit>/`。如果 Go2/B2 区域提示资产不可用，执行 `gqmr assets status`检查逐文件哈希。自定义位置使用 `--asset-root`；旧的 `--cache-dir` 参数仅作兼容别名保留。
 
 最短演示闭环：
 
@@ -46,7 +44,7 @@ uv run gqmr gui
 
 ```bash
 env -u PYTHONPATH QT_QPA_PLATFORM=offscreen MUJOCO_GL=egl \
-  GQMR_TEST_ASSET_CACHE="$HOME/.cache/gqmr" uv run --frozen pytest -q
+  uv run --frozen pytest -q
 PYTHONPATH=src python3 -m gqmr.cli.main --version
 PYTHONPATH=src python3 -m gqmr.cli.main validate motion.robot.npz \
   --model-sha256 <sha256>
@@ -62,7 +60,8 @@ Unitree 资产命令：
 
 ```bash
 PYTHONPATH=src python -m gqmr assets status
-PYTHONPATH=src python -m gqmr assets install unitree-go2
 PYTHONPATH=src python -m gqmr assets pack unitree-go2 go2.gqmr-assets
-PYTHONPATH=src python -m gqmr assets unpack go2.gqmr-assets
+PYTHONPATH=src python -m gqmr assets unpack go2.gqmr-assets --asset-root /path/to/root
 ```
+
+`assets install` 仍保留，用于修复损坏资产或将资产安装到其他根目录。

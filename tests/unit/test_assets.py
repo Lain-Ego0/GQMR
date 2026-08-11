@@ -8,7 +8,13 @@ from pathlib import Path
 import pytest
 
 from gqmr.assets.catalog import AssetFile, AssetSpec, get_asset_spec
-from gqmr.assets.manager import install_asset, pack_asset, status_asset, unpack_asset
+from gqmr.assets.manager import (
+    default_asset_root,
+    install_asset,
+    pack_asset,
+    status_asset,
+    unpack_asset,
+)
 from gqmr.core.errors import AssetError
 
 
@@ -106,6 +112,13 @@ def test_builtin_manifests_are_internally_consistent() -> None:
     assert len(b2.files) == 34
     assert go2.license_spdx == b2.license_spdx == "BSD-3-Clause"
     assert go2.archive_sha256 == b2.archive_sha256
+
+
+def test_repository_assets_are_the_verified_default() -> None:
+    repository = Path(__file__).resolve().parents[2]
+    assert default_asset_root() == repository
+    assert status_asset("unitree-go2").valid
+    assert status_asset("unitree-b2").valid
 
 
 def test_install_status_corruption_repair_and_offline_round_trip(

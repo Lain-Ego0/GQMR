@@ -16,10 +16,10 @@ Models:     unitree_robots/go2, unitree_robots/b2
 规则：
 
 - 不跟随 `main` 自动升级。
-- 下载固定提交的归档，解包前防止绝对路径和 `..` 路径穿越。
-- 只安装模型所需 XML、mesh、纹理和上游 LICENSE。
+- 仓库 `assets/` 内置固定提交所需的 XML、mesh 和上游 LICENSE，不复制无关上游内容。
+- 修复或安装到自定义根目录时，下载固定提交归档，解包前防止绝对路径和 `..` 路径穿越。
 - 仓库维护一份逐文件 SHA-256 manifest；任一文件不匹配即拒绝加载。
-- 缓存目录通过 `platformdirs` 决定，不硬编码用户 home。
+- 默认从仓库 `GQMR/assets` 加载；wheel 携带同一份内置资产，不依赖可被清理的系统缓存。
 - `gqmr assets status` 显示来源、提交、许可证、大小、hash 和验证状态。
 - `gqmr assets pack` 生成带 manifest 和许可证的离线包；`unpack` 重复校验。
 - 发布包和 UI 不得暗示 Unitree 对 GQMR 的认可或背书。

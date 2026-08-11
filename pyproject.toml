@@ -38,6 +38,9 @@ exclude = [
   "motion_imitation/**",
 ]
 
+[tool.hatch.build.targets.wheel.force-include]
+"assets" = "gqmr/bundled/assets"
+
 [tool.hatch.build.targets.sdist]
 exclude = [
   "/motion_imitation",

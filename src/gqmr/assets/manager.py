@@ -52,19 +52,33 @@ def _resolve_spec(asset: str | AssetSpec) -> AssetSpec:
     return get_asset_spec(asset) if isinstance(asset, str) else asset
 
 
-def default_cache_root() -> Path:
+def default_asset_root() -> Path:
+    source_checkout = Path(__file__).resolve().parents[3]
+    if (source_checkout / "assets").is_dir():
+        return source_checkout
+
+    bundled_root = Path(__file__).resolve().parents[1] / "bundled"
+    if (bundled_root / "assets").is_dir():
+        return bundled_root
+
     try:
-        from platformdirs import user_cache_path
+        from platformdirs import user_data_path
     except ImportError as error:
         raise AssetError(
-            "platformdirs is required to locate the GQMR asset cache; "
-            "install project dependencies or pass --cache-dir"
+            "platformdirs is required to locate the GQMR asset root; "
+            "install project dependencies or pass --asset-root"
         ) from error
-    return user_cache_path("gqmr")
+    return user_data_path("gqmr")
+
+
+def default_cache_root() -> Path:
+    """Backward-compatible name for the persistent asset root."""
+
+    return default_asset_root()
 
 
 def _cache_root(cache_dir: str | os.PathLike[str] | None) -> Path:
-    return Path(cache_dir) if cache_dir is not None else default_cache_root()
+    return Path(cache_dir) if cache_dir is not None else default_asset_root()
 
 
 def _install_path(spec: AssetSpec, cache_root: Path) -> Path:

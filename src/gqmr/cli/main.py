@@ -107,6 +107,17 @@ def _inspect_path(path: Path) -> dict[str, object]:
     return inspect_legacy_dog27(path)
 
 
+def _add_asset_root_argument(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--asset-root",
+        "--cache-dir",
+        dest="cache_dir",
+        metavar="PATH",
+        type=Path,
+        help="override the trusted robot asset root (--cache-dir is deprecated)",
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="gqmr")
     parser.add_argument("--version", action="version", version=f"gqmr {__version__}")
@@ -137,7 +148,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     retarget_parser.add_argument("path", type=Path)
     retarget_parser.add_argument("--robot", choices=available_robot_configs(), required=True)
-    retarget_parser.add_argument("--cache-dir", type=Path)
+    _add_asset_root_argument(retarget_parser)
     retarget_parser.add_argument("--output", type=Path, required=True)
     retarget_parser.add_argument(
         "--mode", choices=("fast", "high-quality"), default="fast"
@@ -153,7 +164,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     play_parser.add_argument("path", type=Path)
     play_parser.add_argument("--robot", choices=available_robot_configs(), required=True)
-    play_parser.add_argument("--cache-dir", type=Path)
+    _add_asset_root_argument(play_parser)
     play_parser.add_argument("--dynamics", action="store_true")
     play_parser.add_argument("--kp", type=float, default=35.0)
     play_parser.add_argument("--kd", type=float, default=1.0)
@@ -167,7 +178,7 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
     )
     export_parser.add_argument("--robot", choices=available_robot_configs(), required=True)
-    export_parser.add_argument("--cache-dir", type=Path)
+    _add_asset_root_argument(export_parser)
     export_parser.add_argument("--fps", type=int, default=60)
     export_parser.add_argument("--output", type=Path, required=True)
     validate_parser = subparsers.add_parser(
@@ -184,19 +195,17 @@ def build_parser() -> argparse.ArgumentParser:
         choices=available_robot_configs(),
         help="validate against an installed and verified robot configuration",
     )
-    validate_parser.add_argument(
-        "--cache-dir", type=Path, help="override the trusted asset cache root"
-    )
+    _add_asset_root_argument(validate_parser)
     assets_parser = subparsers.add_parser("assets", help="manage trusted robot assets")
     asset_commands = assets_parser.add_subparsers(dest="asset_command", required=True)
 
     status_parser = asset_commands.add_parser("status", help="verify installed assets")
     status_parser.add_argument("asset", nargs="?", choices=available_assets())
-    status_parser.add_argument("--cache-dir", type=Path)
+    _add_asset_root_argument(status_parser)
 
     install_parser = asset_commands.add_parser("install", help="install a trusted asset")
     install_parser.add_argument("asset", choices=available_assets())
-    install_parser.add_argument("--cache-dir", type=Path)
+    _add_asset_root_argument(install_parser)
     install_parser.add_argument(
         "--archive", type=Path, help="use a pre-downloaded fixed-commit tar.gz"
     )
@@ -205,13 +214,13 @@ def build_parser() -> argparse.ArgumentParser:
     pack_parser = asset_commands.add_parser("pack", help="create a verified offline pack")
     pack_parser.add_argument("asset", choices=available_assets())
     pack_parser.add_argument("destination", type=Path)
-    pack_parser.add_argument("--cache-dir", type=Path)
+    _add_asset_root_argument(pack_parser)
 
     unpack_parser = asset_commands.add_parser(
         "unpack", help="install a verified offline asset pack"
     )
     unpack_parser.add_argument("source", type=Path)
-    unpack_parser.add_argument("--cache-dir", type=Path)
+    _add_asset_root_argument(unpack_parser)
     unpack_parser.add_argument("--repair", action="store_true")
 
     robots_parser = subparsers.add_parser(
@@ -222,7 +231,7 @@ def build_parser() -> argparse.ArgumentParser:
         "inspect", help="show model dimensions and business-name mappings"
     )
     robot_inspect.add_argument("robot", choices=available_robot_configs())
-    robot_inspect.add_argument("--cache-dir", type=Path)
+    _add_asset_root_argument(robot_inspect)
     robot_suggest = robot_commands.add_parser(
         "suggest", help="inspect an arbitrary MJCF and suggest a v1 config"
     )
@@ -241,7 +250,7 @@ def build_parser() -> argparse.ArgumentParser:
     stream_record = stream_commands.add_parser("record", help="record qpos/qvel to RobotMotion")
     stream_record.add_argument("endpoint")
     stream_record.add_argument("--robot", choices=available_robot_configs(), required=True)
-    stream_record.add_argument("--cache-dir", type=Path)
+    _add_asset_root_argument(stream_record)
     stream_record.add_argument("--frames", type=int, required=True)
     stream_record.add_argument("--timeout-ms", type=int, default=10000)
     stream_record.add_argument("--curve-server-key")

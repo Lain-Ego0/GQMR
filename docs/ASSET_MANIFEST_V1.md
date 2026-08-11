@@ -63,14 +63,14 @@ ASCII(decimal_size) + LF
 | Unitree Go2 | `48baeb791c25c3fdaca0163c614145ade0e29d710ee9fcce9d8a5f551e3ca2e1` |
 | Unitree B2 | `2ebeb90cb3cee67b4ae37e719244454b854719db126d9394ed89d3f0c9ec76e5` |
 
-`RobotMotion.metadata_json.model_sha256`、缓存键、回放和导出模型绑定使用此值。
+`RobotMotion.metadata_json.model_sha256`、模型绑定、回放和导出都使用此值。
 
 ## 4. 安装规则
 
-默认缓存根通过 `platformdirs.user_cache_path("gqmr")` 获取；测试和离线部署可以显式传入缓存根。安装目录为：
+源码仓库默认使用项目根目录，Go2/B2 完整资产随仓库位于 `GQMR/assets/`。wheel 会将同一份资产打包到 `gqmr/bundled/assets/`。只有当二者都不存在时，才退回到 `platformdirs.user_data_path("gqmr")`的持久用户数据目录。也可通过 `--asset-root` 显式指定资产根。目录结构为：
 
 ```text
-<cache>/assets/<asset_id>/<source_commit>/
+<asset-root>/assets/<asset_id>/<source_commit>/
 ```
 
 安装器流程：

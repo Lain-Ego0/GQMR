@@ -39,6 +39,15 @@ def test_assets_status_cli_reports_missing(tmp_path: Path, capsys) -> None:
     assert output["assets"][0]["state"] == "missing"
 
 
+def test_assets_status_cli_accepts_asset_root(tmp_path: Path, capsys) -> None:
+    result = main(
+        ["assets", "status", "unitree-go2", "--asset-root", str(tmp_path)]
+    )
+    output = json.loads(capsys.readouterr().out)
+    assert result == 1
+    assert output["assets"][0]["install_path"].startswith(str(tmp_path / "assets"))
+
+
 def test_inspect_and_convert_legacy_cli(tmp_path: Path, capsys) -> None:
     source = tmp_path / "legacy.txt"
     frame = ["0"] * 81

@@ -6,9 +6,9 @@ from pathlib import Path
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("MUJOCO_GL", "egl")
 
-import pytest
 from PySide6.QtWidgets import QApplication
 
+from gqmr.assets import default_asset_root
 from gqmr.core.io import load_motion
 from gqmr.synthetic import generate_dog27_motion
 from gqmr.ui.app import MainWindow
@@ -30,12 +30,12 @@ def test_gui_window_and_preview_smoke() -> None:
 
 
 def test_gui_renders_go2_and_b2_models() -> None:
-    cache = os.environ.get("GQMR_TEST_ASSET_CACHE")
-    if not cache:
-        pytest.skip("set GQMR_TEST_ASSET_CACHE to exercise MuJoCo GUI rendering")
+    asset_root = os.environ.get("GQMR_TEST_ASSET_ROOT") or os.environ.get(
+        "GQMR_TEST_ASSET_CACHE"
+    )
     application = QApplication.instance() or QApplication([])
     window = MainWindow()
-    window.cache_edit.setText(cache)
+    window.cache_edit.setText(str(asset_root or default_asset_root()))
 
     go2_index = window.robot_combo.findData("unitree-go2")
     window.robot_combo.setCurrentIndex(go2_index)

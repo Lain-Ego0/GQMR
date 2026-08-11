@@ -120,7 +120,7 @@ B2 使用相同 `dof_order` 命名模式，默认根高度 `0.52 m`，每条腿�
 
 > 2026-08-11 实施修正：上游 B2 `home` 的 calf `-2.84 rad` 超出固定模型硬限位 `[-2.82, -0.43] rad`，且即使夹到 `-2.80 rad` 也属于折叠姿态，只剩 `0.02 rad` 运动余量，无法用于重定向。产品默认姿态因此改为有充足关节余量的站立姿态 `[0.0, 0.8, -1.6]`。该修正不改变 schema 或模型资产 hash，但会改变 B2 默认姿态和机器人配置 hash。
 
-资产不直接复制整个上游仓库。实现 `gqmr assets install unitree-go2` 和 `unitree-b2`：下载固定提交归档、校验 SHA-256 manifest、保存 BSD 许可证，并安装到 `platformdirs.user_cache_dir("gqmr")`。离线部署使用 `gqmr assets pack/unpack`。
+资产不直接复制整个上游仓库，仅将固定提交中 Go2/B2 所需 XML、mesh 和 BSD LICENSE 纳入仓库 `assets/`，并继续用 SHA-256 manifest 逐文件校验。`gqmr assets install/pack/unpack` 保留用于修复、自定义资产根和离线部署。
 
 完整策略见 [ASSET_AND_LICENSE_POLICY.md](ASSET_AND_LICENSE_POLICY.md)。
 

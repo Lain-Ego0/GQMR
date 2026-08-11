@@ -8,7 +8,7 @@
 
 ```bash
 uv sync --frozen
-uv run gqmr assets install unitree-go2
+uv run gqmr assets status
 uv run gqmr synthetic trot --duration 0.5 --fps 20 --output trot.animal.npz
 uv run gqmr retarget trot.animal.npz --robot unitree-go2 \
   --mode high-quality --output trot.go2.npz
@@ -24,7 +24,7 @@ uv run gqmr gui
 
 | 项目 | 结果 |
 |---|---|
-| 冻结环境完整测试 | `103 passed`，Go2/B2 真实资产测试无跳过 |
+| 冻结环境完整测试 | `105 passed`，Go2/B2 仓库内置真实资产测试无跳过 |
 | 静态编译 | `src`、`tests`、`tools` 全部通过 |
 | 高质量演示重定向 | 121/121 有效帧，足端目标 RMSE `0.000196 m`，接触滑移 `0.0133 m/s` |
 | 周期与高度 | 根高首尾 `0.270 m`；同相位关节最大误差 `0.0021 rad` |
