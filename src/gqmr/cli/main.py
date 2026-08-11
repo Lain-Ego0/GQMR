@@ -544,7 +544,7 @@ def _run_project(args: argparse.Namespace) -> dict[str, object]:
         project = add_resource(project, args.resource, make_active=active)
         save_project(args.path, project)
         return _project_summary(args.path, project)
-    pack_project(args.destination, project)
+    pack_project(args.destination, project, source_path=args.path)
     packed = load_project(args.destination)
     return _project_summary(args.destination, packed)
 

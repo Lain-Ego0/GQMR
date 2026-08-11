@@ -73,5 +73,14 @@ def triangulate_keypoints(
         confidence=confidence,
         valid_mask=valid,
         coordinate_frame="calibrated_world",
-        metadata={"format": "multiview_dlt", "reprojection_error_pixels": reprojection.tolist()},
+        metadata={
+            "format": "multiview_dlt",
+            "reprojection_error_pixels": [
+                [
+                    [float(value) if np.isfinite(value) else None for value in keypoints]
+                    for keypoints in instances
+                ]
+                for instances in reprojection
+            ],
+        },
     )

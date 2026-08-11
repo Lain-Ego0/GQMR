@@ -38,4 +38,4 @@ Rz(0.47 * pi) @ Rx(0.5 * pi)
 - 每行必须恰好包含 81 个有限数值；空文件、NaN/Infinity、非数值和非法帧范围立即拒绝。
 - 单文件安全上限为 2 GiB。
 - 历史数据保持 `CC-BY-NC-4.0` 来源标记，不进入 GQMR 发布包或正式测试产物。
-- GQMR 的 walk/trot/pace/turn 合成动作由代码独立生成，来源标记为 MIT，用于 CI 和演示。
+- GQMR 的 walk/trot/pace/turn 合成动作由代码独立生成，来源标记为 MIT，用于自动回归和演示。

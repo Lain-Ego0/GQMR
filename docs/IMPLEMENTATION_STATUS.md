@@ -10,9 +10,9 @@
 ### 1.1 工程、依赖和资产
 
 - `pyproject.toml` 和真实 `uv.lock` 已提交，锁定 33 个包。
-- GitHub Actions 在 Ubuntu 24.04 执行 frozen sync、compileall、pytest、wheel/sdist 构建和限制数据扫描。
+- 当前阶段不启用 CI/CD；仓库流水线配置已移除，冻结同步、compileall、pytest、构建和发布扫描由本地发布验收命令执行。
 - Unitree Go2/B2 使用固定提交 `ae6a8403e272733e9996ef59990880330496177f`，实现归档/逐文件 hash、安全安装、状态复验和离线 pack/unpack。
-- wheel 和 sdist 都排除 `motion_imitation` 与 CC BY-NC `*_joint_pos.txt`；该检查已固化到 CI。
+- wheel 和 sdist 都排除 `motion_imitation` 与 CC BY-NC `*_joint_pos.txt`；每次本地重建发布物后同时扫描两种归档。
 - 已生成第三方许可证清单和 CycloneDX SBOM，GUI 包含 LGPL/Qt “关于”入口。
 
 ### 1.2 Motion Schema v1 与安全 I/O
@@ -26,7 +26,7 @@
 
 - dog-27 已固化 27 点名称、父子拓扑、对称、根标志、肢体链和历史索引；详见 `DOG27_PROTOCOL_V1.md`。
 - 历史 81 列 TXT 严格读取并执行 `Rz(0.47*pi) @ Rx(0.5*pi)`，保留 CC-BY-NC 来源标记而不将数据进入发布物。
-- 独立生成 MIT walk/trot/pace/turn，作为 CI、演示和量化验收数据。
+- 独立生成 MIT walk/trot/pace/turn，作为自动回归、演示和量化验收数据。
 - 支持通用长表 CSV、严格 JSON/NPZ、DeepLabCut CSV 和 SLEAP 多轨 CSV。
 - `KeypointBatch` 支持 2D/3D、多实例、置信度、有效掩码和坐标描述；已实现标定相机 DLT 三角化与重投影误差。
 - PyAV 解码保留原始 PTS/time base，关键点可按容差与视频精确对齐。
@@ -60,7 +60,8 @@
 
 - `project.json` / `edits.json` 实现冻结 v1 顶层字段、UUID 资源、SHA-256、时间线和编辑命令。
 - ZIP64 项目加载拒绝路径穿越、重复/加密/意外成员、超量和异常压缩；嵌入资源会复验 size/hash。
-- 普通保存保留一份 `.bak`，portable pack 嵌入选中资源，GUI 可直接打开嵌入工程。
+- 普通保存保留一份 `.bak`，portable pack 嵌入选中资源；嵌入工程可原位保存和再次打包，不会把物化缓存副本误登记为外部资源。
+- 物化缓存命中会同时复验 size 和 SHA-256；同尺寸篡改会从 portable 工程重新提取。
 - PySide6 GUI 实现导入/合成、Go2/B2 选择、快速/高质量后台任务、取消、动物/机器人时间线预览、质量日志、编辑/撤销/重做、工程和三种导出。
 - 已生成可展示截图 `docs/images/gqmr-gui.png`。
 
@@ -111,11 +112,13 @@ GQMR_TEST_ASSET_CACHE=<verified-cache> uv run --frozen pytest -q
 结果：
 
 ```text
-98 passed
+100 passed
 python -m compileall: passed
 wheel + sdist: passed
 clean temporary venv wheel install: passed
 ```
+
+本轮 wheel/sdist 的限制数据和 CI/CD 配置扫描均为空；CycloneDX 1.5 SBOM 包含 GQMR 根组件和 22 个 clean wheel 运行时依赖组件。最终归档摘要在每次重建后的验收输出中记录。
 
 真实资产和数值结果：
 
@@ -127,9 +130,9 @@ clean temporary venv wheel install: passed
 | Jacobian | 各 100 个姿态，最大相对误差 `<2.81e-10` |
 | 快速重定向 | Go2/B2 × walk/trot/pace/turn，有效帧 100%，RMSE `<=0.03 m`，限位违规 0 |
 | 高质量接触 | walk/trot/pace 滑移降至快速模式的约 26%–32%，自碰撞帧 0 |
-| 离线快速模式 | `1367 frames/s` |
-| 高质量模式 | `112 frames/s` |
-| 200 Hz 短时流式基线 | 2 s / 400 帧 / 0 GAP / `199.8 Hz` |
+| 离线快速模式 | `1058 frames/s` |
+| 高质量模式 | `98.9 frames/s` |
+| 200 Hz 适度长时流式基线 | 60 s / 12000 帧 / 0 GAP / `199.89 Hz`，峰值 RSS `443 MiB` |
 | Isaac Lab 原版 Loader | 1000 随机采样全有限，名称重排通过 |
 | AMP MuJoCo 往返 | Go2/B2 body 位置/旋转 `<1e-5` |
 | 100 次 undo/redo | 最终内容 hash 完全一致 |
@@ -139,7 +142,10 @@ clean temporary venv wheel install: passed
 - B2 calf 原冻结默认值 `-2.84 rad` 超出上游 `-2.82 rad` 限位，已改为 `-2.80 rad`。
 - 初始环境没有 pip/venv/uv，已用验证 wheel 完成开发验证，随后生成真实 `uv.lock` 并在 frozen venv 重跑全部测试。
 - 原本机 MuJoCo 3.8.0 只能做预验证；现已在冻结 MuJoCo 3.11.0 完成全矩阵。
-- 首次 sdist 构建仍包含 CC BY-NC 历史数据；已添加独立 sdist exclude 并在 CI 同时扫描 wheel/sdist。
+- 首次 sdist 构建仍包含 CC BY-NC 历史数据；已添加独立 sdist exclude，并在本地发布扫描中同时检查 wheel/sdist。
+- generic keypoint NPZ 原先不保存三角化诊断元数据，且无效重投影误差会形成非标准 JSON `NaN`；现已持久化严格 `metadata_json`，无效值使用 `null`。
+- 工程资源导入现按内容去重，并检测哈希读取期间的文件变化；portable 工程的保存、追加资源和再次打包均已回归验证。
+- 当前产品阶段暂不使用 CI/CD，已删除 `.github/workflows/ci.yml`；原 CI 检查项保留为本地发布验收步骤。
 - Isaac Lab 轻量兼容加载器的采样细节与原版不完全相同；已使用固定 v2.3.2 原文件 + CPU Torch 直接执行验证，不再用“字段似乎相同”代替验收。
 
 ## 5. 发布前仍需执行的长时/外部审计

@@ -118,7 +118,7 @@ def load_generic_keypoints_csv(path: str | Path) -> KeypointBatch:
 
 
 def load_generic_keypoints_npz(path: str | Path) -> KeypointBatch:
-    expected = {
+    required = {
         "timestamps",
         "keypoint_names",
         "instance_ids",
@@ -129,7 +129,8 @@ def load_generic_keypoints_npz(path: str | Path) -> KeypointBatch:
     }
     try:
         with np.load(path, allow_pickle=False) as archive:
-            if set(archive.files) != expected:
+            fields = set(archive.files)
+            if not required.issubset(fields) or fields - required - {"metadata_json"}:
                 raise PoseDataError("generic keypoint NPZ field set is invalid")
             arrays = {key: archive[key] for key in archive.files}
     except (OSError, ValueError) as error:
@@ -139,6 +140,18 @@ def load_generic_keypoints_npz(path: str | Path) -> KeypointBatch:
     coordinate = arrays["coordinate_frame"]
     if coordinate.shape != () or coordinate.dtype.kind != "U":
         raise PoseDataError("coordinate_frame must be a Unicode scalar")
+    metadata: dict[str, Any] = {"format": "generic_npz"}
+    if "metadata_json" in arrays:
+        encoded = arrays["metadata_json"]
+        if encoded.shape != () or encoded.dtype.kind != "U":
+            raise PoseDataError("metadata_json must be a Unicode scalar")
+        try:
+            decoded = loads_strict_json(str(encoded.item()))
+        except (json.JSONDecodeError, StrictJSONError) as error:
+            raise PoseDataError(f"invalid metadata_json: {error}") from error
+        if not isinstance(decoded, dict):
+            raise PoseDataError("metadata_json must contain a JSON object")
+        metadata = decoded
     return KeypointBatch(
         timestamps=arrays["timestamps"],
         keypoint_names=tuple(str(value) for value in arrays["keypoint_names"].tolist()),
@@ -147,11 +160,21 @@ def load_generic_keypoints_npz(path: str | Path) -> KeypointBatch:
         confidence=arrays["confidence"],
         valid_mask=arrays["valid_mask"],
         coordinate_frame=str(coordinate.item()),
-        metadata={"format": "generic_npz"},
+        metadata=metadata,
     )
 
 
 def save_generic_keypoints_npz(path: str | Path, batch: KeypointBatch) -> Path:
+    try:
+        metadata_json = json.dumps(
+            batch.metadata,
+            ensure_ascii=False,
+            allow_nan=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+    except (TypeError, ValueError) as error:
+        raise PoseDataError(f"keypoint metadata is not strict JSON: {error}") from error
     arrays = {
         "timestamps": np.ascontiguousarray(batch.timestamps, dtype="<f8"),
         "keypoint_names": np.asarray(batch.keypoint_names, dtype=np.str_),
@@ -160,6 +183,7 @@ def save_generic_keypoints_npz(path: str | Path, batch: KeypointBatch) -> Path:
         "confidence": np.ascontiguousarray(batch.confidence, dtype="<f4"),
         "valid_mask": np.ascontiguousarray(batch.valid_mask, dtype=np.bool_),
         "coordinate_frame": np.asarray(batch.coordinate_frame),
+        "metadata_json": np.asarray(metadata_json),
     }
     return atomic_write(path, lambda stream: np.savez_compressed(stream, **arrays))
 

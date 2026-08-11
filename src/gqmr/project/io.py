@@ -79,36 +79,84 @@ def _write_archive(
         raise
 
 
-def save_project(path: str | Path, project: ProjectDocument) -> Path:
+def _embedded_files(
+    project: ProjectDocument,
+    *,
+    source_path: Path | None,
+    cache_dir: Path,
+) -> dict[str, Path]:
+    if source_path is None or not source_path.is_file():
+        raise ProjectError(
+            "embedded resources require the original portable project archive"
+        )
+    result: dict[str, Path] = {}
+    for resource_id, resource in project.resources.items():
+        if resource.embedded:
+            result[resource.uri] = materialize_resource(
+                source_path, project, resource_id, cache_dir=cache_dir
+            )
+    return result
+
+
+def save_project(
+    path: str | Path,
+    project: ProjectDocument,
+    *,
+    source_path: str | Path | None = None,
+) -> Path:
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    if any(resource.embedded for resource in project.resources.values()):
-        raise ProjectError("save_project cannot recreate embedded resources; use pack_project")
     updated = project.model_copy(update={"updated_at": _utc_now()})
-    _write_archive(destination, updated, {})
+    if any(resource.embedded for resource in updated.resources.values()):
+        source = Path(source_path) if source_path is not None else destination
+        with tempfile.TemporaryDirectory(
+            prefix=f".{destination.name}.resources.", dir=destination.parent
+        ) as temporary_directory:
+            embedded = _embedded_files(
+                updated, source_path=source, cache_dir=Path(temporary_directory)
+            )
+            _write_archive(destination, updated, embedded)
+    else:
+        _write_archive(destination, updated, {})
     return destination
 
 
-def pack_project(path: str | Path, project: ProjectDocument) -> Path:
+def pack_project(
+    path: str | Path,
+    project: ProjectDocument,
+    *,
+    source_path: str | Path | None = None,
+) -> Path:
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
     resources: dict[str, ProjectResource] = {}
     embedded_files: dict[str, Path] = {}
-    for resource_id, resource in project.resources.items():
-        if resource.embedded:
-            raise ProjectError("repacking an already embedded project is not supported")
-        source = Path(resource.uri)
-        if not source.is_file():
-            raise ProjectError(f"cannot pack missing resource {source}")
-        uri = f"embedded/{resource_id}/{source.name}"
-        resources[resource_id] = resource.model_copy(
-            update={"uri": uri, "embedded": True}
+    with tempfile.TemporaryDirectory(
+        prefix=f".{destination.name}.resources.", dir=destination.parent
+    ) as temporary_directory:
+        portable_source = Path(source_path) if source_path is not None else None
+        materialized = (
+            _embedded_files(
+                project,
+                source_path=portable_source,
+                cache_dir=Path(temporary_directory),
+            )
+            if any(resource.embedded for resource in project.resources.values())
+            else {}
         )
-        embedded_files[uri] = source
-    packed = project.model_copy(
-        update={"resources": resources, "updated_at": _utc_now()}
-    )
-    _write_archive(destination, packed, embedded_files)
+        for resource_id, resource in project.resources.items():
+            source = materialized.get(resource.uri, Path(resource.uri))
+            if not source.is_file():
+                raise ProjectError(f"cannot pack missing resource {source}")
+            uri = f"embedded/{resource_id}/{source.name}"
+            resources[resource_id] = resource.model_copy(
+                update={"uri": uri, "embedded": True}
+            )
+            embedded_files[uri] = source
+        packed = project.model_copy(
+            update={"resources": resources, "updated_at": _utc_now()}
+        )
+        _write_archive(destination, packed, embedded_files)
     return destination
 
 
@@ -225,7 +273,12 @@ def materialize_resource(
     )
     destination = root / resource.sha256 / Path(resource.uri).name
     if destination.is_file() and destination.stat().st_size == resource.size:
-        return destination
+        digest = hashlib.sha256()
+        with destination.open("rb") as stream:
+            while chunk := stream.read(1024 * 1024):
+                digest.update(chunk)
+        if digest.hexdigest() == resource.sha256:
+            return destination
     destination.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary_name = tempfile.mkstemp(
         prefix=f".{destination.name}.", suffix=".tmp", dir=destination.parent
@@ -242,6 +295,11 @@ def materialize_resource(
         if digest.hexdigest() != resource.sha256:
             raise ProjectError("embedded resource changed while materializing")
         os.replace(temporary_name, destination)
+        directory_fd = os.open(destination.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
         return destination
     except BaseException:
         try:

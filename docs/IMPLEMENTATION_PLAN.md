@@ -42,7 +42,7 @@ MuJoCo状态 → 语义骨架适配 ───────┘                    
 |---|---|
 | 首发平台 | Ubuntu 24.04 LTS x86-64 |
 | Python | 3.12 |
-| 包管理 | `pyproject.toml` + `uv.lock`；库声明兼容范围，发布和 CI 使用锁文件 |
+| 包管理 | `pyproject.toml` + `uv.lock`；库声明兼容范围，本地发布验收使用锁文件 |
 | GUI | PySide6 6.11 系列，不使用 PyQt6，避免 MIT 项目分发时引入 GPL 约束 |
 | 仿真 | MuJoCo Python 3.11.0；唯一模型、FK、Jacobian、接触、仿真和渲染后端 |
 | 数值计算 | NumPy 2.5 系列、SciPy 1.18 系列 |
@@ -345,7 +345,7 @@ L = keypoint + root + velocity + acceleration + contact_lock
 
 任务：
 
-- 建立 `pyproject.toml`、`uv.lock`、`src/` 和 CI。
+- 建立 `pyproject.toml`、`uv.lock`、`src/` 和本地自动验证入口。
 - 实现 Unitree 固定提交资产下载、hash、许可证安装和离线包。
 - 建立 Go2/B2 配置；B2 使用 calf body + 局部足端偏移。
 - 固化 dog-27 骨架名称、父子关系、左右对称和历史关键点索引。
@@ -484,7 +484,7 @@ gqmr export robot.npz --format isaaclab_amp_v232 --output amp.npz
 
 - 完成长时稳定性、损坏输入、错误模型和资源不足测试。
 - Ubuntu 24.04 wheel、源码包和安装说明。
-- headless CI、GUI smoke test、性能基线和资产缓存。
+- headless 自动测试、GUI smoke test、性能基线和资产缓存。
 - 生成第三方许可证清单、SBOM 和示例工程。
 - 对 schema、插件 API 和 stream protocol 做兼容性测试。
 
@@ -520,7 +520,7 @@ gqmr export robot.npz --format isaaclab_amp_v232 --output amp.npz
 - 单元：坐标、四元数、SLERP、差分、重采样、schema 和配置。
 - 性质测试：随机合法旋转、时间戳和关节范围。
 - 数值测试：解析 FK、有限差分 Jacobian、IK 残差。
-- 回归：MIT 合成数据为 CI 正式 golden；CC BY-NC 历史数据只在本地开发运行。
+- 回归：MIT 合成数据为正式 golden；CC BY-NC 历史数据只在本地开发运行。
 - 集成：输入到 canonical、Isaac Lab 加载器和 MuJoCo 往返回放。
 - GUI：工程打开、播放、取消、崩溃恢复和退出。
 - 性能：在线/离线求解、渲染、流式采集、长时间内存。
@@ -539,7 +539,7 @@ gqmr export robot.npz --format isaaclab_amp_v232 --output amp.npz
 
 ### 迭代 1：资产和 schema
 
-- [x] 建立项目包、真实 `uv.lock` 和 Ubuntu 24.04 CI。
+- [x] 建立项目包、真实 `uv.lock` 和 Ubuntu 24.04 本地自动验证流程。
 - [x] 实现固定提交 Unitree 资产安装器和 manifest。
 - [x] 建立 Go2/B2 配置、加载和 FK/Jacobian 测试。
 - [x] 实现 `AnimalMotion v1`、`RobotMotion v1` 和安全 NPZ I/O。

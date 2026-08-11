@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import mimetypes
+import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -29,6 +30,16 @@ def _sha256_file(path: Path) -> str:
         while chunk := stream.read(1024 * 1024):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _resource_snapshot(path: Path) -> tuple[os.stat_result, str]:
+    before = path.stat()
+    digest = _sha256_file(path)
+    after = path.stat()
+    stable_fields = ("st_dev", "st_ino", "st_size", "st_mtime_ns")
+    if any(getattr(before, field) != getattr(after, field) for field in stable_fields):
+        raise ProjectError(f"project resource changed while importing: {path}")
+    return after, digest
 
 
 class ProjectResource(BaseModel):
@@ -180,7 +191,20 @@ def add_resource(
     resource_path = Path(path).expanduser().resolve(strict=True)
     if not resource_path.is_file():
         raise ProjectError(f"project resource is not a file: {resource_path}")
-    stat = resource_path.stat()
+    stat, digest = _resource_snapshot(resource_path)
+    for resource_id, existing in project.resources.items():
+        if (
+            existing.size == stat.st_size
+            and existing.sha256 == digest
+        ):
+            update: dict[str, Any] = {"updated_at": _utc_now()}
+            if make_active == "animal":
+                update["active_animal_motion"] = resource_id
+            elif make_active == "robot":
+                retarget = dict(project.retarget)
+                retarget["active_robot_motion"] = resource_id
+                update["retarget"] = retarget
+            return project.model_copy(update=update)
     resource_id = str(uuid.uuid4())
     resource = ProjectResource(
         resource_id=resource_id,
@@ -190,7 +214,7 @@ def add_resource(
         or "application/octet-stream",
         size=stat.st_size,
         mtime_ns=stat.st_mtime_ns,
-        sha256=_sha256_file(resource_path),
+        sha256=digest,
         embedded=False,
     )
     resources = dict(project.resources)

@@ -34,13 +34,18 @@ uv run gqmr gui
 开发验证：
 
 ```bash
-pytest -q
+env -u PYTHONPATH QT_QPA_PLATFORM=offscreen MUJOCO_GL=egl \
+  GQMR_TEST_ASSET_CACHE="$HOME/.cache/gqmr" uv run --frozen pytest -q
 PYTHONPATH=src python3 -m gqmr.cli.main --version
 PYTHONPATH=src python3 -m gqmr.cli.main validate motion.robot.npz \
   --model-sha256 <sha256>
 PYTHONPATH=src python3 -m gqmr robots inspect unitree-go2
 PYTHONPATH=src python3 -m gqmr validate motion.robot.npz --robot unitree-go2
 ```
+
+当前阶段不启用 CI/CD，仓库中的自动流水线配置已移除；发布前按
+[实施状态](docs/IMPLEMENTATION_STATUS.md)记录的冻结环境、本地构建、包扫描和干净环境演示步骤验收。
+本轮可展示流程和量化结果见 [展示与验收说明](docs/DEMO_ACCEPTANCE.md)。
 
 Unitree 资产命令：
 

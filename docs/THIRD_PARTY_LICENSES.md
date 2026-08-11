@@ -24,4 +24,4 @@ GQMR 选择按 LGPL-3.0 条件使用 PySide6/Qt，不将 Qt 静态链接进 GQMR
 
 Unitree Go2/B2 模型不直接进入 wheel/sdist；资产安装器从固定提交获取 BSD-3-Clause 文件并同时安装上游 `LICENSE`。
 
-`motion_imitation/retarget_motion/data` 中的历史动作为 CC BY-NC，已同时从 wheel 和 sdist 排除；CI 会检查任何 `_joint_pos.txt` 都未进入发布物。
+`motion_imitation/retarget_motion/data` 中的历史动作为 CC BY-NC，已同时从 wheel 和 sdist 排除；本地发布扫描会检查任何 `_joint_pos.txt` 都未进入发布物。

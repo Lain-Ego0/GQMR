@@ -50,7 +50,7 @@ A1、Laikago、Vision60 当前只存在指向 `pybullet_data` 的历史配置。
 
 - 允许本地研究、算法迁移对照和非商业开发。
 - 不打入 wheel、sdist、示例工程或商业训练数据发布物。
-- CI 正式测试使用项目生成的 MIT 合成动作，不依赖该目录。
+- 正式自动测试使用项目生成的 MIT 合成动作，不依赖该目录。
 - 任何报告使用这些数据时保留来源和 Attribution-NonCommercial 声明。
 
 历史 `motion_imitation` 代码采用 Apache-2.0。迁移期间保留原许可证；删除历史代码前，确认已迁移代码的来源说明和 NOTICE 要求。

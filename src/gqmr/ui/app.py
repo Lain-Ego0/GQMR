@@ -567,7 +567,7 @@ class MainWindow(QMainWindow):
                 for resource in project.resources.values()
             ):
                 project = add_resource(project, self.robot_path, make_active="robot")
-            save_project(self.project_path, project)
+            save_project(self.project_path, project, source_path=self.project_path)
             self.project = project
             self.statusBar().showMessage(f"已保存 {self.project_path}", 4000)
         except Exception as error:
@@ -584,7 +584,7 @@ class MainWindow(QMainWindow):
         if not filename:
             return
         try:
-            pack_project(filename, self.project)
+            pack_project(filename, self.project, source_path=self.project_path)
             self.statusBar().showMessage(f"已打包 {filename}", 4000)
         except Exception as error:
             QMessageBox.critical(self, "打包失败", str(error))

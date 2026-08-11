@@ -5,6 +5,7 @@ from pathlib import Path
 
 import numpy as np
 
+from gqmr.pose import KeypointBatch
 from gqmr.pose.triangulation import triangulate_keypoints
 from gqmr.sources.files import (
     load_deeplabcut_csv,
@@ -46,6 +47,41 @@ def test_generic_json_and_triangulation(tmp_path: Path) -> None:
     assert result.positions.shape == (1, 1, 2, 3)
     assert np.all(result.valid_mask)
     assert np.allclose(result.positions[0, 0, :, 2], 10.0, atol=1e-4)
+
+    destination = tmp_path / "triangulated.npz"
+    save_generic_keypoints_npz(destination, result)
+    restored = load_generic_keypoints_npz(destination)
+    assert restored.metadata == result.metadata
+
+
+def test_triangulation_metadata_uses_json_null_for_missing_points(
+    tmp_path: Path,
+) -> None:
+    positions = np.array([[[[0.0, 0.0], [np.nan, np.nan]]]], dtype=np.float32)
+    batch = KeypointBatch(
+        timestamps=[0.0],
+        keypoint_names=("visible", "missing"),
+        instance_ids=("animal",),
+        positions=positions,
+        confidence=np.array([[[1.0, 0.0]]], dtype=np.float32),
+        valid_mask=np.array([[[True, False]]]),
+        coordinate_frame="image_pixels_x_right_y_down",
+        metadata={},
+    )
+    cameras = np.array(
+        [
+            [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0]],
+            [[1, 0, 0, -1], [0, 1, 0, 0], [0, 0, 1, 0]],
+        ],
+        dtype=np.float64,
+    )
+    result = triangulate_keypoints([batch, batch], cameras)
+    assert result.metadata["reprojection_error_pixels"][0][0][1] is None
+
+    destination = tmp_path / "missing.npz"
+    save_generic_keypoints_npz(destination, result)
+    restored = load_generic_keypoints_npz(destination)
+    assert restored.metadata == result.metadata
 
 
 def test_deeplabcut_csv_reader(tmp_path: Path) -> None:
