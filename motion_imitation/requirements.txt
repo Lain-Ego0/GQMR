@@ -1,0 +1,2 @@
+numpy>=1.17
+pybullet>=3.0.6
