@@ -1,0 +1,37 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "gqmr"
+version = "0.0.1"
+description = "General Quadruped Motion Retargeting"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { file = "LICENSE" }
+authors = [{ name = "GQMR contributors" }]
+dependencies = [
+  "numpy>=2.5,<2.6",
+  "scipy>=1.18,<1.19",
+]
+
+[project.optional-dependencies]
+test = [
+  "hypothesis>=6.138,<7",
+  "pytest>=8.4,<9",
+]
+
+[project.scripts]
+gqmr = "gqmr.cli.main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gqmr"]
+exclude = [
+  "motion_imitation/**",
+]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+testpaths = ["tests"]
+pythonpath = ["src"]
+
