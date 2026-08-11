@@ -30,10 +30,10 @@ class FastRetargetError(GQMRError, ValueError):
 
 @dataclass(frozen=True, slots=True)
 class FastRetargetConfig:
-    max_iterations: int = 24
-    damping: float = 0.025
+    max_iterations: int = 40
+    damping: float = 0.020
     max_joint_step: float = 0.20
-    residual_tolerance: float = 0.03
+    residual_tolerance: float = 0.005
     unreachable_residual: float = 0.10
     root_translation_scale: float | None = None
     foot_motion_scale: float = 1.0
@@ -93,6 +93,17 @@ def _differentiate_rotation(timestamps: np.ndarray, quaternion: np.ndarray) -> n
     return angular_velocity_world(timestamps, quaternion)
 
 
+def _heading_rotations(rotations: Rotation) -> Rotation:
+    forward = rotations.apply(np.array([1.0, 0.0, 0.0]))
+    horizontal_norm = np.linalg.norm(forward[:, :2], axis=1)
+    if np.any(horizontal_norm < 1e-8):
+        raise FastRetargetError("source root heading is vertically degenerate")
+    yaw = np.unwrap(np.arctan2(forward[:, 1], forward[:, 0]))
+    rotation_vectors = np.zeros((len(yaw), 3), dtype=np.float64)
+    rotation_vectors[:, 2] = yaw
+    return Rotation.from_rotvec(rotation_vectors)
+
+
 def _build_targets(
     motion: AnimalMotion,
     robot: RobotModel,
@@ -140,7 +151,8 @@ def _build_targets(
     }
 
     source_rotation = Rotation.from_quat(wxyz_to_xyzw(root.rotation))
-    source_initial_inverse = source_rotation[0].inv()
+    source_heading = _heading_rotations(source_rotation)
+    source_initial_inverse = source_heading[0].inv()
     source_relative_rotation = source_rotation * source_rotation[0].inv()
     robot_rotation = source_relative_rotation * default_root_rotation
     robot_rotation_wxyz = xyzw_to_wxyz(robot_rotation.as_quat())
@@ -154,7 +166,7 @@ def _build_targets(
     source_toes_world = motion.positions[:, toe_ids].astype(np.float64)
     source_toes_local = np.empty_like(source_toes_world)
     for frame in range(motion.frame_count):
-        source_toes_local[frame] = source_rotation[frame].inv().apply(
+        source_toes_local[frame] = source_heading[frame].inv().apply(
             source_toes_world[frame] - root.position[frame]
         )
     source_toe_delta = source_toes_local - source_toes_local[0]

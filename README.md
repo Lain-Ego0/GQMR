@@ -11,17 +11,26 @@ General Quadruped Motion Retargeting
 
 GUI 会直接渲染 Go2/B2 的 MuJoCo mesh，并随时间轴更新机器人姿态；在模型区域拖动可旋转视角，滚轮可缩放。
 
-使用已提交的锁文件安装：
+## 启动与使用
+
+使用已提交的锁文件安装，并先安装要显示的机器人资产：
 
 ```bash
 uv sync --frozen --extra test
 uv run gqmr --version
+uv run gqmr assets install unitree-go2
+uv run gqmr assets install unitree-b2
+uv run gqmr assets status
+uv run gqmr gui
 ```
+
+GUI 中点击“使用示例”，选择 Go2 或 B2，并将“处理方式”切换为“高质量（接触优化）”，再点击“开始重定向”。预览区显示真实 MuJoCo mesh；拖动旋转视角，滚轮缩放，底部时间轴查看各步态相位。
+
+如果 Go2/B2 区域为空或提示资产不可用，先执行上面的 `assets install`/`assets status`。默认资产目录由 `platformdirs` 管理，Linux 通常是 `~/.cache/gqmr`；使用自定义目录时，安装命令和 GUI“资产目录”必须填写同一路径。
 
 最短演示闭环：
 
 ```bash
-uv run gqmr assets install unitree-go2
 uv run gqmr synthetic trot --duration 2 --output trot.animal.npz
 uv run gqmr retarget trot.animal.npz --robot unitree-go2 \
   --mode high-quality --output trot.go2.npz

@@ -14,6 +14,100 @@ Gait = Literal["walk", "trot", "pace", "turn"]
 _LEGS = ("FL", "FR", "RL", "RR")
 
 
+def _body_pose(gait: Gait, time: float, speed: float) -> tuple[np.ndarray, np.ndarray]:
+    yaw = 0.0 if gait != "turn" else 0.65 * time
+    cosine, sine = np.cos(yaw), np.sin(yaw)
+    rotation = np.array(
+        [[cosine, -sine, 0.0], [sine, cosine, 0.0], [0.0, 0.0, 1.0]],
+        dtype=np.float64,
+    )
+    translation = np.array(
+        [
+            speed * time if gait != "turn" else 0.25 * np.sin(yaw),
+            0.0 if gait != "turn" else 0.25 * (1.0 - np.cos(yaw)),
+            0.0,
+        ],
+        dtype=np.float64,
+    )
+    return rotation, translation
+
+
+def _smoothstep(value: float) -> float:
+    return value * value * (3.0 - 2.0 * value)
+
+
+def _foot_target(
+    rest_toe: np.ndarray,
+    *,
+    gait: Gait,
+    time: float,
+    phase_offset: float,
+    cycle_hz: float,
+    speed: float,
+    duty_factor: float,
+    swing_height: float,
+) -> tuple[np.ndarray, bool]:
+    cycle = cycle_hz * time + phase_offset
+    phase = cycle - np.floor(cycle)
+    stance_duration = duty_factor / cycle_hz
+    stride = speed * stance_duration
+    front_toe = rest_toe + np.array([0.5 * stride, 0.0, 0.0])
+    if phase < duty_factor:
+        stance_start = time - phase / cycle_hz
+        rotation, translation = _body_pose(gait, stance_start, speed)
+        return rotation @ front_toe + translation, True
+
+    swing_progress = (phase - duty_factor) / (1.0 - duty_factor)
+    lift_time = time - (phase - duty_factor) / cycle_hz
+    stance_start = lift_time - stance_duration
+    landing_time = time + (1.0 - phase) / cycle_hz
+    lift_rotation, lift_translation = _body_pose(gait, stance_start, speed)
+    land_rotation, land_translation = _body_pose(gait, landing_time, speed)
+    lift_position = lift_rotation @ front_toe + lift_translation
+    land_position = land_rotation @ front_toe + land_translation
+    blend = _smoothstep(swing_progress)
+    target = (1.0 - blend) * lift_position + blend * land_position
+    target[2] += swing_height * np.sin(np.pi * swing_progress)
+    return target, False
+
+
+def _solve_fixed_length_chain(
+    initial: np.ndarray,
+    target: np.ndarray,
+    lengths: np.ndarray,
+) -> np.ndarray:
+    points = initial.astype(np.float64, copy=True)
+    anchor = points[0].copy()
+    total_length = float(np.sum(lengths))
+    direction = target - anchor
+    distance = float(np.linalg.norm(direction))
+    if distance >= total_length - 1e-10:
+        unit = direction / max(distance, 1e-12)
+        for index, length in enumerate(lengths):
+            points[index + 1] = points[index] + unit * length
+        return points
+    for _ in range(48):
+        points[-1] = target
+        for index in range(len(points) - 2, -1, -1):
+            delta = points[index] - points[index + 1]
+            norm = float(np.linalg.norm(delta))
+            if norm < 1e-12:
+                delta = initial[index] - initial[index + 1]
+                norm = float(np.linalg.norm(delta))
+            points[index] = points[index + 1] + delta * (lengths[index] / norm)
+        points[0] = anchor
+        for index in range(len(points) - 1):
+            delta = points[index + 1] - points[index]
+            norm = float(np.linalg.norm(delta))
+            if norm < 1e-12:
+                delta = initial[index + 1] - initial[index]
+                norm = float(np.linalg.norm(delta))
+            points[index + 1] = points[index] + delta * (lengths[index] / norm)
+        if np.linalg.norm(points[-1] - target) < 1e-9:
+            break
+    return points
+
+
 def _rest_pose(names: tuple[str, ...]) -> np.ndarray:
     points = {
         "pelvis": [-0.12, 0.0, 0.46],
@@ -75,30 +169,40 @@ def generate_dog27_motion(
     speed = 0.35 if gait == "walk" else 0.55
     if gait == "turn":
         speed = 0.18
+    duty_factor = 0.62 if gait == "walk" else 0.5
+    swing_height = 0.075
+    chain_ids = {
+        leg: np.array([index[name] for name in skeleton.limb_chains[leg]], dtype=np.int32)
+        for leg in _LEGS
+    }
+    chain_lengths = {
+        leg: np.linalg.norm(
+            np.diff(rest[chain_ids[leg]], axis=0), axis=1
+        )
+        for leg in _LEGS
+    }
     for frame, time in enumerate(timestamps):
         local = rest.copy()
         bob = 0.012 * np.sin(4.0 * np.pi * cycle_hz * time)
         local[:, 2] += bob
+        rotation, translation = _body_pose(gait, float(time), speed)
+        world = local @ rotation.T + translation
         for leg_index, leg in enumerate(_LEGS):
-            phase = 2.0 * np.pi * (cycle_hz * time + phase_offsets[leg_index])
-            swing = max(float(np.sin(phase)), 0.0)
-            fore_aft = 0.07 * float(np.cos(phase))
-            chain = skeleton.limb_chains[leg]
-            for chain_index, name in enumerate(chain[1:], start=1):
-                weight = chain_index / (len(chain) - 1)
-                point_id = index[name]
-                local[point_id, 0] += weight * fore_aft
-                local[point_id, 2] += weight * 0.075 * swing
-            contact[frame, leg_index] = np.clip(0.5 - 5.0 * np.sin(phase), 0.0, 1.0)
-        yaw = 0.0 if gait != "turn" else 0.65 * time
-        cosine, sine = np.cos(yaw), np.sin(yaw)
-        rotation = np.array([[cosine, -sine, 0.0], [sine, cosine, 0.0], [0.0, 0.0, 1.0]])
-        translation = np.array(
-            [speed * time if gait != "turn" else 0.25 * np.sin(yaw),
-             0.0 if gait != "turn" else 0.25 * (1.0 - np.cos(yaw)),
-             0.0]
-        )
-        positions[frame] = local @ rotation.T + translation
+            target, in_contact = _foot_target(
+                rest[chain_ids[leg][-1]],
+                gait=gait,
+                time=float(time),
+                phase_offset=phase_offsets[leg_index],
+                cycle_hz=cycle_hz,
+                speed=speed,
+                duty_factor=duty_factor,
+                swing_height=swing_height,
+            )
+            world[chain_ids[leg]] = _solve_fixed_length_chain(
+                world[chain_ids[leg]], target, chain_lengths[leg]
+            )
+            contact[frame, leg_index] = 1.0 if in_contact else 0.0
+        positions[frame] = world
     return AnimalMotion(
         timestamps=timestamps,
         keypoint_names=names,
@@ -120,6 +224,7 @@ def generate_dog27_motion(
                 "gait": gait,
                 "duration": duration,
                 "fps": fps,
+                "generator_version": 2,
                 "license": "MIT",
             },
             "created_by": {"gqmr_version": __version__},

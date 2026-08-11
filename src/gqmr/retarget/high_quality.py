@@ -5,7 +5,9 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, replace
 
 import numpy as np
+from scipy.spatial.transform import Rotation
 
+from gqmr.core.coordinates import wxyz_to_xyzw
 from gqmr.core.derivatives import linear_velocity
 from gqmr.core.motion import AnimalMotion, RobotMotion, SolverStatus
 from gqmr.retarget.fast import FastRetargetConfig, RetargetDiagnostics, retarget_fast
@@ -15,14 +17,14 @@ from gqmr.skeletons import AnimalSkeleton
 
 @dataclass(frozen=True, slots=True)
 class HighQualityRetargetConfig:
-    window_seconds: float = 1.0
+    window_seconds: float = 0.5
     passes: int = 3
-    max_iterations: int = 20
-    damping: float = 0.02
-    smoothness: float = 0.015
+    max_iterations: int = 48
+    damping: float = 0.005
+    smoothness: float = 0.0002
     max_joint_step: float = 0.12
     contact_threshold: float = 0.5
-    residual_tolerance: float = 0.03
+    residual_tolerance: float = 0.001
     unreachable_residual: float = 0.10
     minimum_foot_height: float = 0.02
     avoid_self_collision: bool = True
@@ -74,6 +76,28 @@ def _contact_locked_targets(
     return desired
 
 
+def _close_loop_endpoint(
+    desired: np.ndarray,
+    original_target: np.ndarray,
+    root_position: np.ndarray,
+    root_rotation: np.ndarray,
+    probability: np.ndarray,
+) -> None:
+    """Make a detected loop close without merging distinct stance intervals."""
+
+    if len(desired) < 2 or not np.allclose(
+        probability[0], probability[-1], atol=1e-6, equal_nan=True
+    ):
+        return
+    rotations = Rotation.from_quat(wxyz_to_xyzw(root_rotation))
+    first_local = rotations[0].inv().apply(original_target[0] - root_position[0])
+    last_local = rotations[-1].inv().apply(original_target[-1] - root_position[-1])
+    if np.max(np.abs(first_local - last_local)) > 1e-4:
+        return
+    desired_local = rotations[0].inv().apply(desired[0] - root_position[0])
+    desired[-1] = root_position[-1] + rotations[-1].apply(desired_local)
+
+
 def retarget_high_quality(
     motion: AnimalMotion,
     robot: RobotModel,
@@ -93,6 +117,13 @@ def retarget_high_quality(
         fast_diagnostics.achieved_foot_positions.astype(np.float64),
         fast_motion.foot_contact_probability,
         config,
+    )
+    _close_loop_endpoint(
+        desired,
+        fast_diagnostics.target_foot_positions.astype(np.float64),
+        fast_motion.root_position.astype(np.float64),
+        fast_motion.root_rotation.astype(np.float64),
+        fast_motion.foot_contact_probability,
     )
     q = fast_motion.dof_position.astype(np.float64).copy()
     achieved = fast_diagnostics.achieved_foot_positions.astype(np.float64).copy()

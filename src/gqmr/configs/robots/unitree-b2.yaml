@@ -23,18 +23,18 @@ feet:
   FR: {body: FR_calf, local_position: [0.0, 0.0, -0.35], contact_geoms: []}
   RL: {body: RL_calf, local_position: [0.0, 0.0, -0.35], contact_geoms: []}
   RR: {body: RR_calf, local_position: [0.0, 0.0, -0.35], contact_geoms: []}
-default_root_position: [0.0, 0.0, 0.5]
+default_root_position: [0.0, 0.0, 0.52]
 default_root_rotation: [1.0, 0.0, 0.0, 0.0]
 default_dof_position:
   - 0.0
-  - 1.28
-  - -2.8
+  - 0.8
+  - -1.6
   - 0.0
-  - 1.28
-  - -2.8
+  - 0.8
+  - -1.6
   - 0.0
-  - 1.28
-  - -2.8
+  - 0.8
+  - -1.6
   - 0.0
-  - 1.28
-  - -2.8
+  - 0.8
+  - -1.6

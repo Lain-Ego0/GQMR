@@ -2,6 +2,8 @@
 
 本目录全部运动数据由 GQMR 的 MIT 合成 `trot` 生成器产生，不包含 `motion_imitation` 中的 CC BY-NC 历史动作。
 
+当前示例为 2 秒 / 121 帧的对角 trot：`FL+RR` 与 `FR+RL` 交替支撑。Go2 高质量结果根高度首尾一致，质量数值见 `quality.json`。
+
 | 文件 | 用途 |
 |---|---|
 | `trot.animal.npz` | dog-27 `AnimalMotion v1` |

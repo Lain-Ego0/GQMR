@@ -98,9 +98,9 @@ B2 没有 foot body/site。配置绑定对应 calf body，局部点为 `[0, 0, -
 | 配置 | `robot_config_sha256` |
 |---|---|
 | Unitree Go2 | `68e508dbbcb210b8a6b155535ca4f7232b8af9f13f973c39098d6db34c00d1a0` |
-| Unitree B2 | `a52eee38add111123ec4756808f396e07653a275f3308050bc95a89224c27cb6` |
+| Unitree B2 | `3188c8673e3a4ce8fead8401e087f15f218c68c7669808923d5f9e58146009d6` |
 
-B2 值包含已修正的合法默认 calf `-2.80 rad`。
+B2 值包含可用于重定向的站立默认姿态：根高 `0.52 m`，每腿 `[0.0, 0.8, -1.6] rad`。上游折叠 `home` 不作为产品默认姿态。
 
 ## 7. 数值 API
 

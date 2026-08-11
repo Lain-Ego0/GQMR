@@ -13,6 +13,7 @@ from gqmr.retarget.animal_preprocess import (
     estimate_root_motion,
 )
 from gqmr.synthetic import generate_dog27_motion, generate_dog27_suite
+from gqmr.skeletons import get_skeleton
 
 
 def test_all_mit_synthetic_gaits_are_valid_and_deterministic() -> None:
@@ -27,6 +28,50 @@ def test_all_mit_synthetic_gaits_are_valid_and_deterministic() -> None:
         assert np.all((motion.contact_probability >= 0.0) & (motion.contact_probability <= 1.0))
         assert motion.metadata["source"]["license"] == "MIT"
         assert motion.metadata["source"]["gait"] == gait
+        assert motion.metadata["source"]["generator_version"] == 2
+
+
+def test_synthetic_trot_has_physical_contact_and_fixed_bone_lengths() -> None:
+    motion = generate_dog27_motion("trot", duration=1.0, fps=60.0)
+    skeleton = get_skeleton("dog-27")
+    name_to_index = {name: index for index, name in enumerate(motion.keypoint_names)}
+
+    assert np.array_equal(motion.contact_probability[:, 0], motion.contact_probability[:, 3])
+    assert np.array_equal(motion.contact_probability[:, 1], motion.contact_probability[:, 2])
+    assert np.array_equal(
+        motion.contact_probability[:, 0], 1.0 - motion.contact_probability[:, 1]
+    )
+
+    toe_ids = np.array(
+        [
+            name_to_index[skeleton.limb_chains[leg][-1]]
+            for leg in ("FL", "FR", "RL", "RR")
+        ]
+    )
+    toe_velocity = np.diff(motion.positions[:, toe_ids], axis=0) / np.diff(
+        motion.timestamps
+    )[:, None, None]
+    stable_contact = (motion.contact_probability[:-1] >= 0.5) & (
+        motion.contact_probability[1:] >= 0.5
+    )
+    assert np.max(np.linalg.norm(toe_velocity, axis=2)[stable_contact]) < 1e-4
+
+    front_left_swing = motion.contact_probability[:, 0] < 0.5
+    swing_x = motion.positions[front_left_swing, toe_ids[0], 0]
+    assert swing_x[-1] > swing_x[0] + 0.15
+
+    for leg in ("FL", "FR", "RL", "RR"):
+        chain = np.array(
+            [name_to_index[name] for name in skeleton.limb_chains[leg]]
+        )
+        lengths = np.linalg.norm(
+            np.diff(motion.positions[:, chain], axis=1), axis=2
+        )
+        relative_change = np.abs(lengths - lengths[0]) / lengths[0]
+        assert np.max(relative_change) < 2e-5
+
+    root = estimate_root_motion(motion)
+    assert root.position[-1, 2] == pytest.approx(root.position[0, 2], abs=1e-6)
 
 
 def test_root_estimator_tracks_turn_and_degrades_to_previous_orientation() -> None:

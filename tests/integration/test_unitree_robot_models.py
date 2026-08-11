@@ -54,10 +54,10 @@ def _analytic_default_feet(robot_id: str) -> np.ndarray:
         pose = (0.0, 0.9, -1.8)
         calf_y = {leg: 0.0 for leg in LEG_ORDER}
     else:
-        root = np.array([0.0, 0.0, 0.5])
+        root = np.array([0.0, 0.0, 0.52])
         hip_x, hip_y, thigh_y = 0.3285, 0.072, 0.11973
         upper, lower = 0.35, 0.35
-        pose = (0.0, 1.28, -2.8)
+        pose = (0.0, 0.8, -1.6)
         calf_y = {
             "FL": -8.6984e-05,
             "FR": 8.6986e-05,
@@ -211,6 +211,25 @@ def test_fast_retarget_meets_synthetic_acceptance(robot_id: str, gait: str) -> N
     ) < 0.09
 
 
+def test_go2_trot_is_height_stable_and_periodic() -> None:
+    robot = load_robot_model("unitree-go2", cache_dir=_asset_cache())
+    animal = generate_dog27_motion("trot", duration=2.0, fps=60.0)
+
+    motion, _ = retarget_high_quality(animal, robot)
+    report = replay_quality_report(motion, robot)
+
+    assert motion.root_position[-1, 2] == pytest.approx(
+        motion.root_position[0, 2], abs=1e-6
+    )
+    assert np.ptp(motion.root_position[:, 2]) < 0.025
+    for frame in (30, 60, 90, 120):
+        assert np.max(
+            np.abs(motion.dof_position[frame] - motion.dof_position[0])
+        ) < 0.01
+    assert report["mean_contact_foot_speed_mps"] < 0.03
+    assert report["maximum_ground_penetration_m"] < 0.005
+
+
 def test_synthetic_to_robot_cli_closed_loop(tmp_path: Path, capsys) -> None:
     cache = _asset_cache()
     animal_path = tmp_path / "pace.animal.npz"
@@ -237,13 +256,23 @@ def test_synthetic_to_robot_cli_closed_loop(tmp_path: Path, capsys) -> None:
             "unitree-go2",
             "--cache-dir",
             str(cache),
+            "--mode",
+            "high-quality",
             "--output",
             str(robot_path),
         ]
     ) == 0
     retarget_output = capsys.readouterr().out
     assert '"valid_frame_ratio": 1.0' in retarget_output
-    assert isinstance(load_motion(robot_path), RobotMotion)
+    loaded_robot_motion = load_motion(robot_path)
+    assert isinstance(loaded_robot_motion, RobotMotion)
+    assert (
+        loaded_robot_motion.metadata["retarget_config"]["mode"]
+        == "high_quality_contact_v1"
+    )
+    assert loaded_robot_motion.metadata["retarget_config"]["high_quality"][
+        "residual_tolerance"
+    ] == pytest.approx(0.001)
 
     assert main(
         [

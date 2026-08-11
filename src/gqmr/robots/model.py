@@ -172,8 +172,12 @@ class RobotModel:
         ):
             raise RobotModelError("dof_position has invalid shape or non-finite values")
         lower, upper = self.joint_ranges[:, 0], self.joint_ranges[:, 1]
-        if np.any(dof_position_array < lower) or np.any(dof_position_array > upper):
+        tolerance = 1e-6
+        if np.any(dof_position_array < lower - tolerance) or np.any(
+            dof_position_array > upper + tolerance
+        ):
             raise RobotModelError("dof_position violates a hard joint limit")
+        dof_position_array = np.clip(dof_position_array, lower, upper)
         self.data.qpos[:] = self.model.qpos0
         start = self.root_qpos_address
         self.data.qpos[start : start + 3] = root_position_array
@@ -243,7 +247,7 @@ class RobotModel:
         return np.stack([self.foot_jacobian(leg) for leg in LEG_ORDER])
 
     def collision_metrics(self) -> tuple[int, float]:
-        """Return self-contact count and maximum world-geom penetration depth."""
+        """Return self-contact count and maximum ground-plane penetration depth."""
 
         self_contacts = 0
         maximum_ground_penetration = 0.0
@@ -254,6 +258,11 @@ class RobotModel:
             if body_a != 0 and body_b != 0:
                 self_contacts += 1
             elif contact.dist < 0.0:
+                world_geom = contact.geom1 if body_a == 0 else contact.geom2
+                if int(self.model.geom_type[world_geom]) != int(
+                    mujoco.mjtGeom.mjGEOM_PLANE
+                ):
+                    continue
                 maximum_ground_penetration = max(
                     maximum_ground_penetration, float(-contact.dist)
                 )

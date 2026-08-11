@@ -116,9 +116,9 @@ default_dof_position: [0.0, 0.9, -1.8, 0.0, 0.9, -1.8,
                        0.0, 0.9, -1.8, 0.0, 0.9, -1.8]
 ```
 
-B2 使用相同 `dof_order` 命名模式，默认根高度 `0.5 m`，每条腿默认 DOF 为 `[0.0, 1.28, -2.80]`。四足端分别绑定 `FL_calf/FR_calf/RL_calf/RR_calf`，局部足端位置固定为 `[0.0, 0.0, -0.35]`；接触通过 calf body 所属碰撞 geom 与地面接触聚合，不依赖缺失的 foot body/site。以上数值进入 FK golden test。
+B2 使用相同 `dof_order` 命名模式，默认根高度 `0.52 m`，每条腿默认 DOF 为 `[0.0, 0.8, -1.6]`。四足端分别绑定 `FL_calf/FR_calf/RL_calf/RR_calf`，局部足端位置固定为 `[0.0, 0.0, -0.35]`；接触通过 calf body 所属碰撞 geom 与地面接触聚合，不依赖缺失的 foot body/site。以上数值进入 FK golden test。
 
-> 2026-08-11 实施修正：原计划的 B2 calf 默认值 `-2.84 rad` 超出固定上游模型硬限位 `[-2.82, -0.43] rad`。修正为 `-2.80 rad`，保留 `0.02 rad` 安全余量。该修正不改变 schema 或模型资产 hash，但会改变 B2 默认姿态和机器人配置 hash。
+> 2026-08-11 实施修正：上游 B2 `home` 的 calf `-2.84 rad` 超出固定模型硬限位 `[-2.82, -0.43] rad`，且即使夹到 `-2.80 rad` 也属于折叠姿态，只剩 `0.02 rad` 运动余量，无法用于重定向。产品默认姿态因此改为有充足关节余量的站立姿态 `[0.0, 0.8, -1.6]`。该修正不改变 schema 或模型资产 hash，但会改变 B2 默认姿态和机器人配置 hash。
 
 资产不直接复制整个上游仓库。实现 `gqmr assets install unitree-go2` 和 `unitree-b2`：下载固定提交归档、校验 SHA-256 manifest、保存 BSD 许可证，并安装到 `platformdirs.user_cache_dir("gqmr")`。离线部署使用 `gqmr assets pack/unpack`。
 

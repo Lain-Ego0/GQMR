@@ -1,45 +1,45 @@
 {
   "dynamics": {
     "claim": "diagnostic_pd_tracking_only",
-    "duration_seconds": 1.0,
+    "duration_seconds": 2.0,
     "fall_time_seconds": null,
-    "joint_tracking_rmse_rad": 0.12599532099938787,
-    "mean_contact_foot_speed_mps": 0.19648165949468158,
+    "joint_tracking_rmse_rad": 0.14615643198813436,
+    "mean_contact_foot_speed_mps": 0.13950782823064278,
     "model_timestep_seconds": 0.002,
     "peak_actuator_command": [
-      5.393154905911587,
-      18.872084418895287,
-      14.386145705944678,
-      4.742126701380741,
-      15.28302386528824,
-      13.160081309578155,
-      3.5561208292407596,
-      14.953832649218565,
-      12.412656622016893,
-      4.834092598933165,
-      12.738384071127017,
-      15.421224866968185
+      4.667843308976562,
+      7.753928779240106,
+      14.32326233470155,
+      2.6354324379110103,
+      5.972222454825037,
+      13.539589875669453,
+      4.308349865326831,
+      7.820957730196723,
+      11.986453242614331,
+      6.340295609519686,
+      6.166134905177926,
+      16.02789903703797
     ],
-    "peak_actuator_command_max": 18.872084418895287,
+    "peak_actuator_command_max": 16.02789903703797,
     "robot_id": "unitree-go2",
-    "root_tracking_rmse_m": 0.19081772111970383,
-    "simulated_steps": 500
+    "root_tracking_rmse_m": 0.41726208066954784,
+    "simulated_steps": 1000
   },
   "kinematic": {
-    "frames": 61,
+    "frames": 121,
     "joint_limit_violation_frames": 0,
-    "maximum_ground_penetration_m": 0.02326247275469879,
-    "mean_contact_foot_speed_mps": 0.20907900523465534,
-    "minimum_foot_height_m": 0.0005911414252010028,
-    "replayed_frames": 61,
+    "maximum_ground_penetration_m": 0.003968331762484019,
+    "mean_contact_foot_speed_mps": 0.013288026727933592,
+    "minimum_foot_height_m": 0.019722935995969762,
+    "replayed_frames": 121,
     "robot_id": "unitree-go2",
     "self_collision_frames": 0,
-    "solver_residual_p95_m": 0.01154311653226614,
-    "solver_residual_rmse_m": 0.008618703112006187,
+    "solver_residual_p95_m": 0.0003128785756416619,
+    "solver_residual_rmse_m": 0.00019644835265353322,
     "status_counts": {
-      "0": 61
+      "0": 121
     },
     "valid_frame_ratio": 1.0,
-    "valid_frames": 61
+    "valid_frames": 121
   }
 }

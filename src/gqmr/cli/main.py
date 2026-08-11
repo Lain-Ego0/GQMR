@@ -142,12 +142,12 @@ def build_parser() -> argparse.ArgumentParser:
     retarget_parser.add_argument(
         "--mode", choices=("fast", "high-quality"), default="fast"
     )
-    retarget_parser.add_argument("--max-iterations", type=int, default=24)
-    retarget_parser.add_argument("--damping", type=float, default=0.025)
-    retarget_parser.add_argument("--residual-tolerance", type=float, default=0.03)
-    retarget_parser.add_argument("--unreachable-residual", type=float, default=0.10)
-    retarget_parser.add_argument("--window-seconds", type=float, default=1.0)
-    retarget_parser.add_argument("--passes", type=int, default=3)
+    retarget_parser.add_argument("--max-iterations", type=int)
+    retarget_parser.add_argument("--damping", type=float)
+    retarget_parser.add_argument("--residual-tolerance", type=float)
+    retarget_parser.add_argument("--unreachable-residual", type=float)
+    retarget_parser.add_argument("--window-seconds", type=float)
+    retarget_parser.add_argument("--passes", type=int)
     play_parser = subparsers.add_parser(
         "play", help="replay a RobotMotion through MuJoCo FK and report quality"
     )
@@ -442,24 +442,64 @@ def _run_retarget(args: argparse.Namespace) -> dict[str, object]:
     if not isinstance(source, AnimalMotion):
         raise RobotModelError("retarget input must be a canonical AnimalMotion")
     robot = load_robot_model(args.robot, cache_dir=args.cache_dir)
+    fast_defaults = FastRetargetConfig()
     config = FastRetargetConfig(
-        max_iterations=args.max_iterations,
-        damping=args.damping,
-        residual_tolerance=args.residual_tolerance,
-        unreachable_residual=args.unreachable_residual,
+        max_iterations=(
+            fast_defaults.max_iterations
+            if args.max_iterations is None
+            else args.max_iterations
+        ),
+        damping=fast_defaults.damping if args.damping is None else args.damping,
+        residual_tolerance=(
+            fast_defaults.residual_tolerance
+            if args.residual_tolerance is None
+            else args.residual_tolerance
+        ),
+        unreachable_residual=(
+            fast_defaults.unreachable_residual
+            if args.unreachable_residual is None
+            else args.unreachable_residual
+        ),
     )
     if args.mode == "fast":
         motion, diagnostics = retarget_fast(source, robot, config=config)
     else:
+        high_quality_defaults = HighQualityRetargetConfig()
         motion, diagnostics = retarget_high_quality(
             source,
             robot,
             fast_config=config,
             config=HighQualityRetargetConfig(
-                window_seconds=args.window_seconds,
-                passes=args.passes,
-                residual_tolerance=args.residual_tolerance,
-                unreachable_residual=args.unreachable_residual,
+                window_seconds=(
+                    high_quality_defaults.window_seconds
+                    if args.window_seconds is None
+                    else args.window_seconds
+                ),
+                passes=(
+                    high_quality_defaults.passes
+                    if args.passes is None
+                    else args.passes
+                ),
+                max_iterations=(
+                    high_quality_defaults.max_iterations
+                    if args.max_iterations is None
+                    else args.max_iterations
+                ),
+                damping=(
+                    high_quality_defaults.damping
+                    if args.damping is None
+                    else args.damping
+                ),
+                residual_tolerance=(
+                    high_quality_defaults.residual_tolerance
+                    if args.residual_tolerance is None
+                    else args.residual_tolerance
+                ),
+                unreachable_residual=(
+                    high_quality_defaults.unreachable_residual
+                    if args.unreachable_residual is None
+                    else args.unreachable_residual
+                ),
             ),
         )
     save_motion(args.output, motion)
