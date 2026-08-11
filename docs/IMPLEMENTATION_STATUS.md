@@ -14,7 +14,9 @@
 
 ```text
 gqmr inspect <motion.npz>
-gqmr validate <motion.npz> [--model-sha256 SHA256]
+gqmr validate <motion.npz> [--model-sha256 SHA256 | --robot ROBOT]
+gqmr assets install|status|pack|unpack ...
+gqmr robots inspect <robot>
 ```
 
 - CLI 成功和失败结果均为 JSON；协议错误返回退出码 `2`，不向普通用户输出 Python traceback。
@@ -56,12 +58,25 @@ gqmr validate <motion.npz> [--model-sha256 SHA256]
 - 安装状态会报告来源提交、许可证、精确大小、`model_sha256`、缺失、损坏和意外文件。
 - `model_sha256` 定义为 XML/mesh 文件清单的确定性聚合 hash；许可证保留在逐文件完整性校验中，但不改变机器人模型身份。完整算法见 `ASSET_MANIFEST_V1.md`。
 
+### 1.6 机器人配置与 MuJoCo 绑定
+
+- 使用 Pydantic v2 严格验证内置 Go2/B2 YAML；拒绝未知字段、重复 YAML key、不安全模型路径、错误 hash、重复 DOF、非单位根四元数和非有限默认值。
+- `$root` 解析为模型中唯一 free joint，因此同时支持 Go2 的无名 free joint和 B2 的 `floating_base_joint`，业务代码不依赖上游根关节名称差异。
+- 加载时要求可信资产状态、配置 `model_sha256` 和 manifest 完全一致。
+- 验证模型恰好包含一个自由根、12 个具名标量 hinge/slide DOF、完整硬限位、`base_body`、足端 body/局部点和接触 geom。
+- 业务 DOF 顺序只来自配置；已用故意打乱 MJCF 声明顺序的合成模型证明 qpos/qvel 地址不会冒充业务顺序。
+- 提供根姿态/12 DOF 写入、body/足端 FK、单足/四足 Jacobian 和碰撞 geom 聚合 API。
+- Go2 使用具名 `FL/FR/RL/RR` contact geom；B2 按 calf body 聚合所有启用接触的 collision geom。
+- `gqmr robots inspect` 输出模型维度、配置/model hash、业务 DOF、qpos/qvel 地址、关节限位和足端绑定。
+- `gqmr validate --robot` 同时验证可信资产、机器人配置、模型 hash 和 RobotMotion DOF 规范顺序。
+- 详细机器语义见 `ROBOT_CONFIG_V1.md`。
+
 ## 2. 自动验证结果
 
-当前环境：Python 3.12.3、NumPy 1.26.4、SciPy 1.11.4、pytest 7.4.4。
+当前环境：Python 3.12.3、MuJoCo 3.8.0、NumPy 1.26.4、SciPy 1.11.4、Pydantic 2.11.7、pytest 7.4.4。Pydantic/platformdirs 仅为本机验证安装在被忽略的 `.deps`。
 
 ```text
-27 passed
+36 passed
 python -m compileall: passed
 CLI version smoke test: gqmr 0.0.1
 ```
@@ -73,10 +88,12 @@ CLI version smoke test: gqmr 0.0.1
 | NUM-001 | 已实现并通过当前环境测试 | 100,000 个随机单位四元数 `wxyz↔xyzw` 往返 |
 | NUM-002 | 已实现并通过当前环境测试 | 10,000 个随机旋转的矩阵/四元数测地角误差门槛 |
 | NUM-003 | 已实现并通过当前环境测试 | 单位范数、相邻符号连续、短弧中点 |
+| NUM-004 | 已实现并通过当前环境测试 | Go2 FK 最大误差 `0 m`；B2 `5.55e-17 m`，独立解析链对照 |
+| NUM-005 | 已实现并通过当前环境测试 | Go2/B2 各 100 个合法姿态，最大相对误差分别 `2.81e-10`、`2.76e-10` |
 | NUM-006 | 核心算法已实现并通过当前环境测试 | 非等间隔正弦线速度和恒角速度 RMSE `<1%` |
 | DAT-001 | 核心加载器已实现并通过 | object dtype、非法 JSON、重复 NPZ 名和重复 JSON key 均拒绝 |
 | DAT-002 | 已实现并通过 | 重复、倒序、NaN、非零起点时间轴均拒绝 |
-| DAT-003 | 部分完成 | 调用方提供预期模型 hash 时强制匹配；资产配置自动绑定待实现 |
+| DAT-003 | 核心验证路径已完成 | `validate --robot` 强制校验可信资产、配置、模型 hash 和 DOF 顺序；回放/导出命令尚未实现 |
 | DAT-004 | 部分完成 | 数据层阻止严重失败状态成为有效帧；导出器尚未实现 |
 
 真实上游集成验证：
@@ -88,6 +105,8 @@ CLI version smoke test: gqmr 0.0.1
 | B2 逐文件安装和状态复验 | 通过，`model_sha256=2ebeb90cb3cee67b4ae37e719244454b854719db126d9394ed89d3f0c9ec76e5` |
 | Go2 离线 pack/unpack | 通过，解包后逐文件复验通过 |
 | MuJoCo 加载 | Go2/B2 均通过；`nq=19`、`nv=18`、`nu=12` |
+| 默认姿态 FK golden | Go2 最大误差 `0 m`；B2 最大误差 `5.55e-17 m` |
+| Jacobian 中心有限差分 | 每个模型 100 个合法姿态；最大相对误差 `<2.81e-10` |
 
 这里的“通过”只代表当前开发环境的自动测试。正式发布结论仍需在冻结依赖和参考机上运行完整验收，不提前替代发布验收报告。
 
@@ -103,13 +122,14 @@ CLI version smoke test: gqmr 0.0.1
 ### ISSUE-002：模型绑定还缺可信资产来源（已解决）
 
 - 固定提交资产安装器、Go2/B2 逐文件 manifest 和可信 `model_sha256` 已落地。
-- 剩余工作：机器人 YAML 配置和 `validate --robot` 尚未接入，因此 DAT-003 仍是部分完成，但不再缺资产可信根。
+- Go2/B2 Pydantic YAML、配置 hash、MuJoCo 名称解析和 `validate --robot` 已接入同一可信链。
+- 回放和导出命令实现后仍需复用该入口，不允许各自绕过模型绑定。
 
 ### ISSUE-003：当前没有可发布的机器人闭环
 
 - 仓库中的 `motion_imitation` 是算法迁移参考，且历史动作数据为 CC BY-NC；它不能充当正式 CI 测试集或发布示例。
-- 影响：FK/Jacobian、快速 IK、MuJoCo 回放和 AMP 往返尚无可信发布证据。
-- 处理：建立 MIT 合成骨架/动作和固定上游 Unitree 资产后，再开始重定向纵向闭环。
+- 资产、模型加载、FK 和 Jacobian 已有可信证据；快速 IK、MuJoCo 轨迹回放和 AMP 往返仍未实现。
+- 处理：建立 MIT 合成骨架/动作后开始重定向纵向闭环。
 
 ### ISSUE-004：本机 MuJoCo 版本不是冻结发布基线
 
@@ -117,9 +137,21 @@ CLI version smoke test: gqmr 0.0.1
 - 本轮真实 Go2/B2 加载结果与计划中的技术验证数据一致，但只能算资产兼容性预验证。
 - `pyproject.toml` 已声明 `mujoco>=3.11,<3.12`。生成 `uv.lock` 后必须在 3.11 系列重跑加载、FK、Jacobian、接触和 AMP 往返，才能形成发布证据。
 
+### ISSUE-005：B2 冻结默认姿态违反硬限位（已解决）
+
+- 原计划每条 B2 腿默认值为 `[0.0, 1.28, -2.84] rad`，但固定上游 MJCF 的 calf 硬限位为 `[-2.82, -0.43] rad`。
+- 这会使模型初始化立即违反 RET-001，并被严格加载器正确拒绝。
+- 默认 calf 已修正为 `-2.80 rad`，保留 `0.02 rad` 安全余量；schema 和资产 `model_sha256` 不变，B2 默认姿态和 `robot_config_sha256` 改变。
+
+### ISSUE-006：当前 Python 缺少 venv/pip
+
+- 系统 Python 3.12 没有 `ensurepip`、`pip` 或可用的 `python3.12-venv`，无法创建常规开发虚拟环境。
+- 本轮只为验证从 PyPI 下载固定 wheel、逐个核对官方 SHA-256 后解压到被忽略的 `.deps`，没有修改系统或用户级 Python。
+- 该目录不是发布物，也不替代 `uv.lock`；干净构建环境仍必须通过 `uv sync` 安装正式锁定依赖。
+
 ## 4. 下一步顺序
 
-1. 建立 Go2/B2 YAML 配置和 MuJoCo 名称解析，完成独立 FK/Jacobian golden。
-2. 将 `validate --robot` 连接到资产目录和机器人配置，完成 DAT-003 自动绑定。
-3. 固化 dog-27 骨架与旧 27 点读取器，生成 MIT 合成 walk/trot/pace/turn。
-4. 在上述可信底座上实现 Go2 快速 IK，而不是直接依赖历史 PyBullet 路径。
+1. 固化 dog-27 骨架语义、历史索引和严格读取器。
+2. 生成 MIT 合成 walk/trot/pace/turn，作为正式 CI 测试集。
+3. 实现动物根姿态退化处理、尺度估计和状态码。
+4. 在已验证的 MuJoCo Jacobian 上实现 Go2 快速 DLS IK。

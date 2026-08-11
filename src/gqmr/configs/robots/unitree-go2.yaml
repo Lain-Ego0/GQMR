@@ -1,0 +1,40 @@
+schema_version: 1
+id: unitree-go2
+asset_id: unitree-go2
+model: unitree_robots/go2/scene.xml
+model_sha256: 48baeb791c25c3fdaca0163c614145ade0e29d710ee9fcce9d8a5f551e3ca2e1
+root_joint: $root
+base_body: base_link
+dof_order:
+  - FL_hip_joint
+  - FL_thigh_joint
+  - FL_calf_joint
+  - FR_hip_joint
+  - FR_thigh_joint
+  - FR_calf_joint
+  - RL_hip_joint
+  - RL_thigh_joint
+  - RL_calf_joint
+  - RR_hip_joint
+  - RR_thigh_joint
+  - RR_calf_joint
+feet:
+  FL: {body: FL_foot, local_position: [0.0, 0.0, 0.0], contact_geoms: [FL]}
+  FR: {body: FR_foot, local_position: [0.0, 0.0, 0.0], contact_geoms: [FR]}
+  RL: {body: RL_foot, local_position: [0.0, 0.0, 0.0], contact_geoms: [RL]}
+  RR: {body: RR_foot, local_position: [0.0, 0.0, 0.0], contact_geoms: [RR]}
+default_root_position: [0.0, 0.0, 0.27]
+default_root_rotation: [1.0, 0.0, 0.0, 0.0]
+default_dof_position:
+  - 0.0
+  - 0.9
+  - -1.8
+  - 0.0
+  - 0.9
+  - -1.8
+  - 0.0
+  - 0.9
+  - -1.8
+  - 0.0
+  - 0.9
+  - -1.8

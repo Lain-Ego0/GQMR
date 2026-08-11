@@ -116,7 +116,9 @@ default_dof_position: [0.0, 0.9, -1.8, 0.0, 0.9, -1.8,
                        0.0, 0.9, -1.8, 0.0, 0.9, -1.8]
 ```
 
-B2 使用相同 `dof_order` 命名模式，默认根高度 `0.5 m`，每条腿默认 DOF 为 `[0.0, 1.28, -2.84]`。四足端分别绑定 `FL_calf/FR_calf/RL_calf/RR_calf`，局部足端位置固定为 `[0.0, 0.0, -0.35]`；接触通过 calf body 所属碰撞 geom 与地面接触聚合，不依赖缺失的 foot body/site。以上数值进入 FK golden test。
+B2 使用相同 `dof_order` 命名模式，默认根高度 `0.5 m`，每条腿默认 DOF 为 `[0.0, 1.28, -2.80]`。四足端分别绑定 `FL_calf/FR_calf/RL_calf/RR_calf`，局部足端位置固定为 `[0.0, 0.0, -0.35]`；接触通过 calf body 所属碰撞 geom 与地面接触聚合，不依赖缺失的 foot body/site。以上数值进入 FK golden test。
+
+> 2026-08-11 实施修正：原计划的 B2 calf 默认值 `-2.84 rad` 超出固定上游模型硬限位 `[-2.82, -0.43] rad`。修正为 `-2.80 rad`，保留 `0.02 rad` 安全余量。该修正不改变 schema 或模型资产 hash，但会改变 B2 默认姿态和机器人配置 hash。
 
 资产不直接复制整个上游仓库。实现 `gqmr assets install unitree-go2` 和 `unitree-b2`：下载固定提交归档、校验 SHA-256 manifest、保存 BSD 许可证，并安装到 `platformdirs.user_cache_dir("gqmr")`。离线部署使用 `gqmr assets pack/unpack`。
 
@@ -539,7 +541,7 @@ gqmr export robot.npz --format isaaclab_amp_v232 --output amp.npz
 
 - [ ] 建立项目包、锁文件和 CI。（项目包与 CLI 骨架已完成；`uv.lock`、CI 待完成）
 - [x] 实现固定提交 Unitree 资产安装器和 manifest。
-- [ ] 建立 Go2/B2 配置、加载和 FK/Jacobian 测试。
+- [x] 建立 Go2/B2 配置、加载和 FK/Jacobian 测试。
 - [x] 实现 `AnimalMotion v1`、`RobotMotion v1` 和安全 NPZ I/O。
 - [ ] 将 27 点数据转换为具名 dog-27 配置。
 - [ ] 建立 MIT 合成测试骨架和动作。

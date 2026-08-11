@@ -1,0 +1,40 @@
+schema_version: 1
+id: unitree-b2
+asset_id: unitree-b2
+model: unitree_robots/b2/scene.xml
+model_sha256: 2ebeb90cb3cee67b4ae37e719244454b854719db126d9394ed89d3f0c9ec76e5
+root_joint: $root
+base_body: base_link
+dof_order:
+  - FL_hip_joint
+  - FL_thigh_joint
+  - FL_calf_joint
+  - FR_hip_joint
+  - FR_thigh_joint
+  - FR_calf_joint
+  - RL_hip_joint
+  - RL_thigh_joint
+  - RL_calf_joint
+  - RR_hip_joint
+  - RR_thigh_joint
+  - RR_calf_joint
+feet:
+  FL: {body: FL_calf, local_position: [0.0, 0.0, -0.35], contact_geoms: []}
+  FR: {body: FR_calf, local_position: [0.0, 0.0, -0.35], contact_geoms: []}
+  RL: {body: RL_calf, local_position: [0.0, 0.0, -0.35], contact_geoms: []}
+  RR: {body: RR_calf, local_position: [0.0, 0.0, -0.35], contact_geoms: []}
+default_root_position: [0.0, 0.0, 0.5]
+default_root_rotation: [1.0, 0.0, 0.0, 0.0]
+default_dof_position:
+  - 0.0
+  - 1.28
+  - -2.8
+  - 0.0
+  - 1.28
+  - -2.8
+  - 0.0
+  - 1.28
+  - -2.8
+  - 0.0
+  - 1.28
+  - -2.8
