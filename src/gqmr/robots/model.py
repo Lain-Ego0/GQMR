@@ -170,6 +170,27 @@ class RobotModel:
         body_id = self._name_id(mujoco.mjtObj.mjOBJ_BODY, body_name)
         return np.asarray(self.data.xpos[body_id], dtype=np.float64).copy()
 
+    def named_bodies(self) -> tuple[str, ...]:
+        """Return all named non-world bodies in stable MuJoCo body-ID order."""
+
+        names: list[str] = []
+        for body_id in range(1, self.model.nbody):
+            name = mujoco.mj_id2name(
+                self.model, mujoco.mjtObj.mjOBJ_BODY, body_id
+            )
+            if name:
+                names.append(name)
+        return tuple(names)
+
+    def body_pose(self, body_name: str) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+        """Return world position and wxyz orientation for a named body."""
+
+        body_id = self._name_id(mujoco.mjtObj.mjOBJ_BODY, body_name)
+        return (
+            np.asarray(self.data.xpos[body_id], dtype=np.float64).copy(),
+            np.asarray(self.data.xquat[body_id], dtype=np.float64).copy(),
+        )
+
     def foot_position(self, leg: str) -> NDArray[np.float64]:
         try:
             binding = self.feet[leg]

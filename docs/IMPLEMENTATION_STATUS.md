@@ -17,6 +17,11 @@ gqmr inspect <motion.npz>
 gqmr validate <motion.npz> [--model-sha256 SHA256 | --robot ROBOT]
 gqmr assets install|status|pack|unpack ...
 gqmr robots inspect <robot>
+gqmr synthetic walk|trot|pace|turn --output animal.npz
+gqmr convert legacy.txt --skeleton dog-27 --fps 60 --output animal.npz
+gqmr retarget animal.npz --robot unitree-go2 --output robot.npz
+gqmr play robot.npz --robot unitree-go2
+gqmr export robot.npz --format canonical|deepmimic|isaaclab_amp_v232 --output ...
 ```
 
 - CLI 成功和失败结果均为 JSON；协议错误返回退出码 `2`，不向普通用户输出 Python traceback。
@@ -71,12 +76,30 @@ gqmr robots inspect <robot>
 - `gqmr validate --robot` 同时验证可信资产、机器人配置、模型 hash 和 RobotMotion DOF 规范顺序。
 - 详细机器语义见 `ROBOT_CONFIG_V1.md`。
 
+### 1.7 dog-27 输入与 MIT 合成动作
+
+- 固化 27 点名称、父子拓扑、9 组左右对称、根标志和四肢链；历史核心索引与趾端索引已写入自动测试。
+- 严格读取 81 列历史文本，实施大小上限、列数、数值有限性和帧范围校验。
+- 历史坐标转换固定为 `Rz(0.47*pi) @ Rx(0.5*pi)`，不混入机器人比例。
+- 实现确定性 MIT walk/trot/pace/turn 生成器，不复制 CC BY-NC 历史动作。
+- 实现根位置/姿态估计、退化帧状态、躯干/肢体尺度和趾端接触概率估计。
+- 协议和中间点命名的不确定性见 `DOG27_PROTOCOL_V1.md`。
+
+### 1.8 快速重定向与训练导出
+
+- 实现根运动相对映射、躯干/肢长比例解算和四足目标生成。
+- 在 MuJoCo 足端 Jacobian 上实现逐帧热启动 DLS IK，包含阻尼、步长限制、硬关节限位、残差和 `OK/MAX_ITER/UNREACHABLE/MISSING_INPUT/NUMERICAL_ERROR`状态。
+- `play` 对规范轨迹执行 MuJoCo FK 回放，报告有效帧、限位违规、求解残差、接触滑移速度和最低足高。
+- 实现 DeepMimic 兼容 JSON（root xyz + root xyzw + 12 标量 DOF）。
+- 实现 Isaac Lab v2.3.2 AMP NPZ：60 Hz Hermite/SLERP 重采样、MuJoCo 全具名 body FK、wxyz 姿态和世界系 body 速度。
+- 实现轻量 AMP 兼容加载/随机时间采样器，并完成 Go2/B2 逐帧 MuJoCo FK 往返。
+
 ## 2. 自动验证结果
 
 当前环境：Python 3.12.3、MuJoCo 3.8.0、NumPy 1.26.4、SciPy 1.11.4、Pydantic 2.11.7、pytest 7.4.4。Pydantic/platformdirs 仅为本机验证安装在被忽略的 `.deps`。
 
 ```text
-36 passed
+67 passed
 python -m compileall: passed
 CLI version smoke test: gqmr 0.0.1
 ```
@@ -93,8 +116,13 @@ CLI version smoke test: gqmr 0.0.1
 | NUM-006 | 核心算法已实现并通过当前环境测试 | 非等间隔正弦线速度和恒角速度 RMSE `<1%` |
 | DAT-001 | 核心加载器已实现并通过 | object dtype、非法 JSON、重复 NPZ 名和重复 JSON key 均拒绝 |
 | DAT-002 | 已实现并通过 | 重复、倒序、NaN、非零起点时间轴均拒绝 |
-| DAT-003 | 核心验证路径已完成 | `validate --robot` 强制校验可信资产、配置、模型 hash 和 DOF 顺序；回放/导出命令尚未实现 |
-| DAT-004 | 部分完成 | 数据层阻止严重失败状态成为有效帧；导出器尚未实现 |
+| DAT-003 | 已实现并通过 | `validate/play/export --robot` 共用可信资产、配置、模型 hash 和 DOF 顺序绑定 |
+| DAT-004 | 已实现并通过 | 数据层禁止严重失败状态伪装成有效帧；导出器拒绝任何含无效帧的区间 |
+| RET-001 | 已实现并通过当前环境测试 | Go2/B2 共 8 组合成动作硬限位违规 0 帧 |
+| RET-002 | 已实现并通过当前环境测试 | walk/trot/pace/turn 在 Go2/B2 上有效帧率 100% |
+| RET-003 | 已实现并通过当前环境测试 | 全部 8 组有效帧足端 RMSE `<= 0.03 m` |
+| AMP-001 | 兼容字段和采样已实现 | 严格字段/形状/dtype 加载和 1000 个随机时间点采样通过；原版 Isaac Lab 仍待冻结环境验证 |
+| AMP-002 | 已实现并通过当前环境测试 | Go2/B2 AMP 逐帧恢复 MuJoCo，body 位置和姿态误差 `<1e-5` |
 
 真实上游集成验证：
 
@@ -125,11 +153,11 @@ CLI version smoke test: gqmr 0.0.1
 - Go2/B2 Pydantic YAML、配置 hash、MuJoCo 名称解析和 `validate --robot` 已接入同一可信链。
 - 回放和导出命令实现后仍需复用该入口，不允许各自绕过模型绑定。
 
-### ISSUE-003：当前没有可发布的机器人闭环
+### ISSUE-003：当前没有可发布的机器人闭环（已解决核心路径）
 
 - 仓库中的 `motion_imitation` 是算法迁移参考，且历史动作数据为 CC BY-NC；它不能充当正式 CI 测试集或发布示例。
-- 资产、模型加载、FK 和 Jacobian 已有可信证据；快速 IK、MuJoCo 轨迹回放和 AMP 往返仍未实现。
-- 处理：建立 MIT 合成骨架/动作后开始重定向纵向闭环。
+- MIT 合成动作、快速 IK、MuJoCo FK 回放、DeepMimic 和 AMP 往返已实现。
+- 剩余工作是在冻结 Isaac Lab v2.3.2 环境运行原版 `MotionLoader`，以及后续 PD 动力学报告。
 
 ### ISSUE-004：本机 MuJoCo 版本不是冻结发布基线
 
@@ -151,7 +179,7 @@ CLI version smoke test: gqmr 0.0.1
 
 ## 4. 下一步顺序
 
-1. 固化 dog-27 骨架语义、历史索引和严格读取器。
-2. 生成 MIT 合成 walk/trot/pace/turn，作为正式 CI 测试集。
-3. 实现动物根姿态退化处理、尺度估计和状态码。
-4. 在已验证的 MuJoCo Jacobian 上实现 Go2 快速 DLS IK。
+1. 实现 `.gqmr` 工程容器、原子保存和基础编辑命令。
+2. 实现 PySide6 GUI MVP，复用当前 CLI 核心导入/重定向/导出路径。
+3. 在冻结依赖环境跑原版 Isaac Lab v2.3.2 `MotionLoader`。
+4. 继续 MuJoCo 流式协议、视频姿态插件和高质量求解器。

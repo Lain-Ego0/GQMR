@@ -1,0 +1,60 @@
+schema_version: 1
+id: dog-27
+coordinate_frame: gqmr_world_x_forward_y_left_z_up
+keypoints:
+  - {index: 0, name: pelvis, parent: null, side: center, role: pelvis}
+  - {index: 1, name: pelvis_duplicate, parent: pelvis, side: center, role: source_duplicate}
+  - {index: 2, name: spine, parent: pelvis, side: center, role: spine}
+  - {index: 3, name: neck, parent: spine, side: center, role: neck}
+  - {index: 4, name: head, parent: neck, side: center, role: head}
+  - {index: 5, name: muzzle, parent: head, side: center, role: muzzle}
+  - {index: 6, name: left_shoulder, parent: neck, side: left, role: limb_root}
+  - {index: 7, name: left_front_upper, parent: left_shoulder, side: left, role: limb_joint}
+  - {index: 8, name: left_front_elbow, parent: left_front_upper, side: left, role: limb_joint}
+  - {index: 9, name: left_front_wrist, parent: left_front_elbow, side: left, role: limb_joint}
+  - {index: 10, name: left_front_toe, parent: left_front_wrist, side: left, role: toe}
+  - {index: 11, name: right_shoulder, parent: neck, side: right, role: limb_root}
+  - {index: 12, name: right_front_upper, parent: right_shoulder, side: right, role: limb_joint}
+  - {index: 13, name: right_front_elbow, parent: right_front_upper, side: right, role: limb_joint}
+  - {index: 14, name: right_front_wrist, parent: right_front_elbow, side: right, role: limb_joint}
+  - {index: 15, name: right_front_toe, parent: right_front_wrist, side: right, role: toe}
+  - {index: 16, name: left_hip, parent: pelvis, side: left, role: limb_root}
+  - {index: 17, name: left_hind_knee, parent: left_hip, side: left, role: limb_joint}
+  - {index: 18, name: left_hind_ankle, parent: left_hind_knee, side: left, role: limb_joint}
+  - {index: 19, name: left_hind_toe, parent: left_hind_ankle, side: left, role: toe}
+  - {index: 20, name: right_hip, parent: pelvis, side: right, role: limb_root}
+  - {index: 21, name: right_hind_knee, parent: right_hip, side: right, role: limb_joint}
+  - {index: 22, name: right_hind_ankle, parent: right_hind_knee, side: right, role: limb_joint}
+  - {index: 23, name: right_hind_toe, parent: right_hind_ankle, side: right, role: toe}
+  - {index: 24, name: tail_base, parent: pelvis, side: center, role: tail}
+  - {index: 25, name: tail_mid, parent: tail_base, side: center, role: tail}
+  - {index: 26, name: tail_tip, parent: tail_mid, side: center, role: tail}
+symmetry_pairs:
+  - [left_shoulder, right_shoulder]
+  - [left_front_upper, right_front_upper]
+  - [left_front_elbow, right_front_elbow]
+  - [left_front_wrist, right_front_wrist]
+  - [left_front_toe, right_front_toe]
+  - [left_hip, right_hip]
+  - [left_hind_knee, right_hind_knee]
+  - [left_hind_ankle, right_hind_ankle]
+  - [left_hind_toe, right_hind_toe]
+root_landmarks:
+  pelvis: pelvis
+  neck: neck
+  left_shoulder: left_shoulder
+  right_shoulder: right_shoulder
+  left_hip: left_hip
+  right_hip: right_hip
+limb_chains:
+  FL: [left_shoulder, left_front_upper, left_front_elbow, left_front_wrist, left_front_toe]
+  FR: [right_shoulder, right_front_upper, right_front_elbow, right_front_wrist, right_front_toe]
+  RL: [left_hip, left_hind_knee, left_hind_ankle, left_hind_toe]
+  RR: [right_hip, right_hind_knee, right_hind_ankle, right_hind_toe]
+source:
+  project: AI4Animation
+  legacy_format: 81 comma-separated values per frame
+  notes:
+    - Indices 0 and 1 are identical in every bundled legacy clip; index 0 is canonical pelvis.
+    - Core retarget landmarks 0, 3, 6, 11, 16, 20 and toes 10, 15, 19, 23 are confirmed by the historical importer.
+    - Intermediate descriptive names preserve chain semantics; the legacy files contain no embedded point names.

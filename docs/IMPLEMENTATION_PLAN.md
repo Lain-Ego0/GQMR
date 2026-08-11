@@ -543,22 +543,22 @@ gqmr export robot.npz --format isaaclab_amp_v232 --output amp.npz
 - [x] 实现固定提交 Unitree 资产安装器和 manifest。
 - [x] 建立 Go2/B2 配置、加载和 FK/Jacobian 测试。
 - [x] 实现 `AnimalMotion v1`、`RobotMotion v1` 和安全 NPZ I/O。
-- [ ] 将 27 点数据转换为具名 dog-27 配置。
-- [ ] 建立 MIT 合成测试骨架和动作。
+- [x] 将 27 点数据转换为具名 dog-27 配置。
+- [x] 建立 MIT 合成测试骨架和动作。
 
 逐项实现证据、当前环境差异和待解决问题见 [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md)。
 
 ### 迭代 2：Go2 CLI 重定向
 
-- [ ] 实现坐标适配、根姿态退化处理和尺度估计。
-- [ ] 实现 MuJoCo Jacobian DLS IK、限位和逐帧状态。
-- [ ] 实现 canonical NPZ、回放和质量报告。
-- [ ] 完成 pace/trot/turn 的量化本地迁移对照。
+- [x] 实现坐标适配、根姿态退化处理和尺度估计。
+- [x] 实现 MuJoCo Jacobian DLS IK、限位和逐帧状态。
+- [x] 实现 canonical NPZ、运动学回放和质量报告。
+- [x] 完成 walk/pace/trot/turn 的 Go2/B2 量化本地迁移对照。
 
 ### 迭代 3：AMP 往返和 B2
 
-- [ ] 实现 `isaaclab_amp_v232` 导出器。
+- [x] 实现 `isaaclab_amp_v232` 导出器。
 - [ ] 使用 Isaac Lab 原版 MotionLoader 加载、插值采样和名称重排。
-- [ ] 从导出结果恢复 MuJoCo Go2 姿态并比较 FK。
-- [ ] 接入 B2 的 calf body + 足端局部偏移配置。
+- [x] 从导出结果恢复 MuJoCo Go2/B2 姿态并比较 FK。
+- [x] 接入 B2 的 calf body + 足端局部偏移配置。
 - [ ] 冻结 CLI v0.1 前的核心接口。

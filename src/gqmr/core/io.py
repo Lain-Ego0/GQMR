@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import tempfile
@@ -308,6 +309,25 @@ def _motion_arrays(motion: Motion) -> dict[str, np.ndarray]:
     }
 
 
+def motion_sha256(motion: Motion) -> str:
+    """Return a deterministic semantic hash of a validated canonical motion."""
+
+    digest = hashlib.sha256()
+    for name, array in sorted(_motion_arrays(motion).items()):
+        contiguous = np.ascontiguousarray(array)
+        digest.update(name.encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(contiguous.dtype.str.encode("ascii"))
+        digest.update(b"\0")
+        digest.update(
+            json.dumps(contiguous.shape, separators=(",", ":")).encode("ascii")
+        )
+        digest.update(b"\0")
+        digest.update(contiguous.tobytes(order="C"))
+        digest.update(b"\n")
+    return digest.hexdigest()
+
+
 def save_motion(path: str | os.PathLike[str], motion: Motion) -> None:
     """Atomically save canonical motion; a failed write never replaces the target."""
 
@@ -334,4 +354,3 @@ def save_motion(path: str | os.PathLike[str], motion: Motion) -> None:
         except FileNotFoundError:
             pass
         raise
-

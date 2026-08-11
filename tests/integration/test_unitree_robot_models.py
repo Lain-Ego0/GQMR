@@ -7,9 +7,14 @@ import numpy as np
 import pytest
 
 from gqmr.cli.main import main
-from gqmr.core.io import save_motion
+from gqmr.core.coordinates import quaternion_geodesic_distance
+from gqmr.core.io import load_motion, save_motion
 from gqmr.core.motion import RobotMotion, SolverStatus
+from gqmr.exporters import load_isaaclab_amp_v232
+from gqmr.exporters.isaaclab_amp import export_isaaclab_amp_v232
+from gqmr.retarget import replay_quality_report, retarget_fast
 from gqmr.robots import LEG_ORDER, load_robot_model
+from gqmr.synthetic import generate_dog27_motion
 
 
 def _asset_cache() -> Path:
@@ -170,3 +175,120 @@ def test_robot_inspect_and_motion_model_binding_cli(tmp_path: Path, capsys) -> N
     )
     assert result == 0
     assert '"valid": true' in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("robot_id", ["unitree-go2", "unitree-b2"])
+@pytest.mark.parametrize("gait", ["walk", "trot", "pace", "turn"])
+def test_fast_retarget_meets_synthetic_acceptance(robot_id: str, gait: str) -> None:
+    robot = load_robot_model(robot_id, cache_dir=_asset_cache())
+    animal = generate_dog27_motion(gait, duration=1.0, fps=60.0)
+
+    motion, diagnostics = retarget_fast(animal, robot)
+    report = replay_quality_report(motion, robot)
+
+    assert np.mean(motion.frame_valid) >= 0.995
+    assert np.sqrt(np.mean(motion.solver_residual[motion.frame_valid] ** 2)) <= 0.03
+    assert report["joint_limit_violation_frames"] == 0
+    assert report["replayed_frames"] == motion.frame_count
+    assert diagnostics.target_foot_positions.shape == (61, 4, 3)
+    assert np.max(
+        np.abs(
+            diagnostics.target_foot_positions[motion.frame_valid]
+            - diagnostics.achieved_foot_positions[motion.frame_valid]
+        )
+    ) < 0.09
+
+
+def test_synthetic_to_robot_cli_closed_loop(tmp_path: Path, capsys) -> None:
+    cache = _asset_cache()
+    animal_path = tmp_path / "pace.animal.npz"
+    robot_path = tmp_path / "pace.go2.npz"
+
+    assert main(
+        [
+            "synthetic",
+            "pace",
+            "--duration",
+            "0.5",
+            "--fps",
+            "30",
+            "--output",
+            str(animal_path),
+        ]
+    ) == 0
+    capsys.readouterr()
+    assert main(
+        [
+            "retarget",
+            str(animal_path),
+            "--robot",
+            "unitree-go2",
+            "--cache-dir",
+            str(cache),
+            "--output",
+            str(robot_path),
+        ]
+    ) == 0
+    retarget_output = capsys.readouterr().out
+    assert '"valid_frame_ratio": 1.0' in retarget_output
+    assert isinstance(load_motion(robot_path), RobotMotion)
+
+    assert main(
+        [
+            "play",
+            str(robot_path),
+            "--robot",
+            "unitree-go2",
+            "--cache-dir",
+            str(cache),
+        ]
+    ) == 0
+    play_output = capsys.readouterr().out
+    assert '"joint_limit_violation_frames": 0' in play_output
+
+
+@pytest.mark.parametrize("robot_id", ["unitree-go2", "unitree-b2"])
+def test_isaaclab_amp_export_fk_roundtrip(tmp_path: Path, robot_id: str) -> None:
+    robot = load_robot_model(robot_id, cache_dir=_asset_cache())
+    animal = generate_dog27_motion("turn", duration=0.5, fps=60.0)
+    motion, _ = retarget_fast(animal, robot)
+    destination = tmp_path / f"{robot_id}.amp.npz"
+
+    export_isaaclab_amp_v232(motion, robot, destination, fps=60)
+    clip = load_isaaclab_amp_v232(destination)
+
+    assert clip.dof_names == robot.config.dof_order
+    assert robot.config.base_body in clip.body_names
+    assert clip.frame_count == motion.frame_count
+    rng = np.random.default_rng(20260811)
+    samples = clip.sample(rng.uniform(0.0, clip.duration, size=1000))
+    assert samples["dof_positions"].shape == (1000, 12)
+    assert np.max(
+        np.abs(np.linalg.norm(samples["body_rotations"], axis=-1) - 1.0)
+    ) < 1e-5
+
+    base_index = clip.body_names.index(robot.config.base_body)
+    maximum_position_error = 0.0
+    maximum_rotation_error = 0.0
+    for frame in range(clip.frame_count):
+        robot.set_pose(
+            clip.body_positions[frame, base_index],
+            clip.body_rotations[frame, base_index],
+            clip.dof_positions[frame],
+        )
+        for body_index, body_name in enumerate(clip.body_names):
+            position, rotation = robot.body_pose(body_name)
+            maximum_position_error = max(
+                maximum_position_error,
+                float(np.max(np.abs(position - clip.body_positions[frame, body_index]))),
+            )
+            maximum_rotation_error = max(
+                maximum_rotation_error,
+                float(
+                    quaternion_geodesic_distance(
+                        rotation, clip.body_rotations[frame, body_index]
+                    )
+                ),
+            )
+    assert maximum_position_error < 1e-5
+    assert maximum_rotation_error < 1e-5
