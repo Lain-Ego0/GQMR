@@ -11,6 +11,7 @@ requires-python = ">=3.12"
 license = { file = "LICENSE" }
 authors = [{ name = "GQMR contributors" }]
 dependencies = [
+  "av>=16,<17",
   "numpy>=2.5,<2.6",
   "platformdirs>=4.4,<5",
   "mujoco>=3.11,<3.12",

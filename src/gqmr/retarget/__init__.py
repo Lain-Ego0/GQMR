@@ -14,6 +14,11 @@ from gqmr.retarget.fast import (
     retarget_fast,
 )
 from gqmr.retarget.quality import replay_quality_report
+from gqmr.retarget.high_quality import (
+    HighQualityRetargetConfig,
+    retarget_high_quality,
+)
+from gqmr.retarget.dynamics import PDReplayConfig, simulate_pd_tracking
 
 __all__ = [
     "BodyScaleEstimate",
@@ -26,4 +31,8 @@ __all__ = [
     "RetargetDiagnostics",
     "retarget_fast",
     "replay_quality_report",
+    "HighQualityRetargetConfig",
+    "retarget_high_quality",
+    "PDReplayConfig",
+    "simulate_pd_tracking",
 ]

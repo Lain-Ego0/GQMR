@@ -39,6 +39,7 @@ class RobotModel:
         self.root_dof_address = int(model.jnt_dofadr[self.root_joint_id])
         self.base_body_id = self._name_id(mujoco.mjtObj.mjOBJ_BODY, config.base_body)
         self.joint_ids, self.qpos_addresses, self.dof_addresses = self._resolve_dofs()
+        self.actuator_ids = self._resolve_actuators()
         self.joint_ranges = np.ascontiguousarray(model.jnt_range[self.joint_ids], dtype=np.float64)
         self.feet = self._resolve_feet()
         self.set_pose(
@@ -137,6 +138,21 @@ class RobotModel:
                 contact_geom_ids=geom_ids,
             )
         return result
+
+    def _resolve_actuators(self) -> NDArray[np.int32]:
+        actuator_ids: list[int] = []
+        for joint_id, name in zip(self.joint_ids, self.config.dof_order):
+            matches = [
+                actuator_id
+                for actuator_id in range(self.model.nu)
+                if int(self.model.actuator_trnid[actuator_id, 0]) == int(joint_id)
+            ]
+            if len(matches) != 1:
+                raise RobotModelError(
+                    f"DOF {name!r} must have exactly one directly bound actuator"
+                )
+            actuator_ids.append(matches[0])
+        return np.asarray(actuator_ids, dtype=np.int32)
 
     def set_pose(
         self,

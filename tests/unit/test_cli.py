@@ -118,3 +118,52 @@ def test_project_cli_new_add_info_and_pack(tmp_path: Path, capsys) -> None:
     assert main(["project", "pack", str(project), str(portable)]) == 0
     packed = json.loads(capsys.readouterr().out)
     assert packed["embedded_resources"] == 1
+
+
+def test_edit_cli_trim_and_resample(tmp_path: Path, capsys) -> None:
+    source = tmp_path / "animal.npz"
+    trimmed = tmp_path / "trimmed.npz"
+    resampled = tmp_path / "resampled.npz"
+    assert main(
+        [
+            "synthetic",
+            "walk",
+            "--duration",
+            "1",
+            "--fps",
+            "20",
+            "--output",
+            str(source),
+        ]
+    ) == 0
+    capsys.readouterr()
+    assert main(
+        [
+            "edit",
+            "trim",
+            str(source),
+            "--start",
+            "0.25",
+            "--end",
+            "0.75",
+            "--output",
+            str(trimmed),
+        ]
+    ) == 0
+    capsys.readouterr()
+    assert main(
+        [
+            "edit",
+            "resample",
+            str(trimmed),
+            "--fps",
+            "40",
+            "--output",
+            str(resampled),
+        ]
+    ) == 0
+    output = json.loads(capsys.readouterr().out)
+    motion = load_motion(resampled)
+
+    assert output["frames"] == 21
+    assert motion.duration == 0.5

@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Sequence
 
@@ -22,6 +24,7 @@ from gqmr.core.errors import GQMRError
 from gqmr.core.io import load_motion, save_motion
 from gqmr.core.motion import AnimalMotion, RobotMotion
 from gqmr.exporters import export_deepmimic_json, export_isaaclab_amp_v232
+from gqmr.editing import apply_edit, make_robot_loop
 from gqmr.project import (
     add_resource,
     load_project,
@@ -29,11 +32,30 @@ from gqmr.project import (
     pack_project,
     save_project,
 )
-from gqmr.retarget import FastRetargetConfig, replay_quality_report, retarget_fast
+from gqmr.project.model import EditCommand
+from gqmr.pose import keypoint_batch_to_animal_motion, triangulate_keypoints
+from gqmr.pose.api import PoseDataError
+from gqmr.retarget import (
+    FastRetargetConfig,
+    HighQualityRetargetConfig,
+    replay_quality_report,
+    retarget_fast,
+    retarget_high_quality,
+    PDReplayConfig,
+    simulate_pd_tracking,
+)
 from gqmr.robots import available_robot_configs, load_robot_model
 from gqmr.robots.model import RobotModelError
 from gqmr.skeletons import get_skeleton
-from gqmr.sources.files import inspect_legacy_dog27, load_legacy_dog27
+from gqmr.sources.files import (
+    inspect_legacy_dog27,
+    load_deeplabcut_csv,
+    load_generic_keypoints_json,
+    load_generic_keypoints_npz,
+    load_legacy_dog27,
+    load_sleap_csv,
+    save_generic_keypoints_npz,
+)
 from gqmr.synthetic import generate_dog27_motion
 from gqmr.stream import GQMRRecorder
 
@@ -105,16 +127,24 @@ def build_parser() -> argparse.ArgumentParser:
     retarget_parser.add_argument("--robot", choices=available_robot_configs(), required=True)
     retarget_parser.add_argument("--cache-dir", type=Path)
     retarget_parser.add_argument("--output", type=Path, required=True)
+    retarget_parser.add_argument(
+        "--mode", choices=("fast", "high-quality"), default="fast"
+    )
     retarget_parser.add_argument("--max-iterations", type=int, default=24)
     retarget_parser.add_argument("--damping", type=float, default=0.025)
     retarget_parser.add_argument("--residual-tolerance", type=float, default=0.03)
     retarget_parser.add_argument("--unreachable-residual", type=float, default=0.10)
+    retarget_parser.add_argument("--window-seconds", type=float, default=1.0)
+    retarget_parser.add_argument("--passes", type=int, default=3)
     play_parser = subparsers.add_parser(
         "play", help="replay a RobotMotion through MuJoCo FK and report quality"
     )
     play_parser.add_argument("path", type=Path)
     play_parser.add_argument("--robot", choices=available_robot_configs(), required=True)
     play_parser.add_argument("--cache-dir", type=Path)
+    play_parser.add_argument("--dynamics", action="store_true")
+    play_parser.add_argument("--kp", type=float, default=35.0)
+    play_parser.add_argument("--kd", type=float, default=1.0)
     export_parser = subparsers.add_parser(
         "export", help="export RobotMotion to a training or compatibility format"
     )
@@ -205,6 +235,48 @@ def build_parser() -> argparse.ArgumentParser:
     project_pack = project_commands.add_parser("pack", help="create a portable project")
     project_pack.add_argument("path", type=Path)
     project_pack.add_argument("destination", type=Path)
+    pose_parser = subparsers.add_parser("pose", help="inspect and convert pose-result files")
+    pose_commands = pose_parser.add_subparsers(dest="pose_command", required=True)
+    pose_inspect = pose_commands.add_parser("inspect", help="inspect keypoint results")
+    pose_inspect.add_argument("path", type=Path)
+    pose_inspect.add_argument(
+        "--format",
+        choices=("generic-json", "generic-npz", "deeplabcut-csv", "sleap-csv"),
+        required=True,
+    )
+    pose_inspect.add_argument("--fps", type=float, default=60.0)
+    pose_convert = pose_commands.add_parser("convert", help="convert calibrated 3D results to AnimalMotion")
+    pose_convert.add_argument("path", type=Path)
+    pose_convert.add_argument("--format", choices=("generic-json", "generic-npz"), required=True)
+    pose_convert.add_argument("--instance")
+    pose_convert.add_argument("--output", type=Path, required=True)
+    pose_triangulate = pose_commands.add_parser("triangulate", help="triangulate synchronized generic 2D views")
+    pose_triangulate.add_argument("paths", type=Path, nargs="+")
+    pose_triangulate.add_argument("--camera-matrices", type=Path, required=True)
+    pose_triangulate.add_argument("--output", type=Path, required=True)
+    edit_parser = subparsers.add_parser("edit", help="apply immutable motion edits")
+    edit_commands = edit_parser.add_subparsers(dest="edit_command", required=True)
+    for command_name in ("trim", "time-scale", "root-transform", "contact", "resample", "loop"):
+        command_parser = edit_commands.add_parser(command_name)
+        command_parser.add_argument("path", type=Path)
+        command_parser.add_argument("--output", type=Path, required=True)
+        if command_name == "trim":
+            command_parser.add_argument("--start", type=float, required=True)
+            command_parser.add_argument("--end", type=float, required=True)
+        elif command_name == "time-scale":
+            command_parser.add_argument("--speed", type=float, required=True)
+        elif command_name == "root-transform":
+            command_parser.add_argument("--translation", type=float, nargs=3, required=True)
+            command_parser.add_argument("--yaw", type=float, required=True)
+        elif command_name == "contact":
+            command_parser.add_argument("--start", type=float, required=True)
+            command_parser.add_argument("--end", type=float, required=True)
+            command_parser.add_argument("--leg", choices=("FL", "FR", "RL", "RR"), required=True)
+            command_parser.add_argument("--probability", type=float, required=True)
+        elif command_name == "resample":
+            command_parser.add_argument("--fps", type=int, required=True)
+        elif command_name == "loop":
+            command_parser.add_argument("--close-forward", action="store_true")
     return parser
 
 
@@ -306,13 +378,27 @@ def _run_retarget(args: argparse.Namespace) -> dict[str, object]:
         residual_tolerance=args.residual_tolerance,
         unreachable_residual=args.unreachable_residual,
     )
-    motion, diagnostics = retarget_fast(source, robot, config=config)
+    if args.mode == "fast":
+        motion, diagnostics = retarget_fast(source, robot, config=config)
+    else:
+        motion, diagnostics = retarget_high_quality(
+            source,
+            robot,
+            fast_config=config,
+            config=HighQualityRetargetConfig(
+                window_seconds=args.window_seconds,
+                passes=args.passes,
+                residual_tolerance=args.residual_tolerance,
+                unreachable_residual=args.unreachable_residual,
+            ),
+        )
     save_motion(args.output, motion)
     residual = motion.solver_residual[motion.frame_valid]
     return {
         "input": str(args.path),
         "output": str(args.output),
         "robot_id": args.robot,
+        "mode": args.mode,
         "frames": motion.frame_count,
         "valid_frames": int(np.count_nonzero(motion.frame_valid)),
         "valid_frame_ratio": float(np.mean(motion.frame_valid)),
@@ -329,7 +415,12 @@ def _run_play(args: argparse.Namespace) -> dict[str, object]:
     if not isinstance(motion, RobotMotion):
         raise RobotModelError("play input must be a canonical RobotMotion")
     robot = load_robot_model(args.robot, cache_dir=args.cache_dir)
-    return replay_quality_report(motion, robot)
+    report: dict[str, object] = {"kinematic": replay_quality_report(motion, robot)}
+    if args.dynamics:
+        report["dynamics"] = simulate_pd_tracking(
+            motion, robot, config=PDReplayConfig(kp=args.kp, kd=args.kd)
+        )
+    return report
 
 
 def _run_export(args: argparse.Namespace) -> dict[str, object]:
@@ -410,6 +501,106 @@ def _run_stream(args: argparse.Namespace) -> dict[str, object]:
     }
 
 
+def _load_pose_file(path: Path, format_name: str, fps: float = 60.0):
+    if format_name == "generic-json":
+        return load_generic_keypoints_json(path)
+    if format_name == "generic-npz":
+        return load_generic_keypoints_npz(path)
+    if format_name == "deeplabcut-csv":
+        return load_deeplabcut_csv(path, fps=fps)
+    return load_sleap_csv(path, fps=fps)
+
+
+def _pose_summary(path: Path, batch) -> dict[str, object]:
+    return {
+        "path": str(path),
+        "frames": len(batch.timestamps),
+        "duration_seconds": float(batch.timestamps[-1] - batch.timestamps[0]),
+        "dimensions": batch.dimensions,
+        "keypoint_names": list(batch.keypoint_names),
+        "instance_ids": list(batch.instance_ids),
+        "coordinate_frame": batch.coordinate_frame,
+        "valid_observation_ratio": float(np.mean(batch.valid_mask)),
+    }
+
+
+def _run_pose(args: argparse.Namespace) -> dict[str, object]:
+    if args.pose_command == "inspect":
+        batch = _load_pose_file(args.path, args.format, args.fps)
+        return _pose_summary(args.path, batch)
+    if args.pose_command == "convert":
+        batch = _load_pose_file(args.path, args.format)
+        motion = keypoint_batch_to_animal_motion(batch, instance_id=args.instance)
+        save_motion(args.output, motion)
+        return {
+            **_pose_summary(args.path, batch),
+            "output": str(args.output),
+            "schema_id": motion.schema_id,
+        }
+    views = [load_generic_keypoints_json(path) for path in args.paths]
+    try:
+        cameras = np.asarray(
+            json.loads(args.camera_matrices.read_text(encoding="utf-8")),
+            dtype=np.float64,
+        )
+    except (OSError, json.JSONDecodeError, ValueError) as error:
+        raise PoseDataError(f"cannot read camera matrices: {error}") from error
+    batch = triangulate_keypoints(views, cameras)
+    save_generic_keypoints_npz(args.output, batch)
+    return {
+        "views": [str(path) for path in args.paths],
+        "output": str(args.output),
+        "frames": len(batch.timestamps),
+        "valid_observation_ratio": float(np.mean(batch.valid_mask)),
+    }
+
+
+def _run_edit(args: argparse.Namespace) -> dict[str, object]:
+    motion = load_motion(args.path)
+    if args.edit_command == "loop":
+        if not isinstance(motion, RobotMotion):
+            raise RobotModelError("loop closure requires RobotMotion")
+        edited = make_robot_loop(
+            motion, preserve_forward_displacement=not args.close_forward
+        )
+    else:
+        if args.edit_command == "trim":
+            kind, parameters = "trim", {"start": args.start, "end": args.end}
+        elif args.edit_command == "time-scale":
+            kind, parameters = "time_scale", {"speed": args.speed}
+        elif args.edit_command == "root-transform":
+            kind, parameters = "root_transform", {
+                "translation": args.translation,
+                "yaw": args.yaw,
+            }
+        elif args.edit_command == "contact":
+            kind, parameters = "contact_override", {
+                "start": args.start,
+                "end": args.end,
+                "leg": args.leg,
+                "probability": args.probability,
+            }
+        else:
+            kind, parameters = "resample", {"fps": args.fps}
+        command = EditCommand(
+            command_id=str(uuid.uuid4()),
+            kind=kind,
+            resource_id=str(uuid.uuid4()),
+            parameters=parameters,
+            created_at=datetime.now(timezone.utc).isoformat(),
+        )
+        edited = apply_edit(motion, command)
+    save_motion(args.output, edited)
+    return {
+        "input": str(args.path),
+        "output": str(args.output),
+        "edit": args.edit_command,
+        "schema_id": edited.schema_id,
+        "frames": edited.frame_count,
+        "duration_seconds": edited.duration,
+    }
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
@@ -431,6 +622,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
         if args.command == "stream":
             result = _run_stream(args)
+            print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
+            return 0
+        if args.command == "pose":
+            result = _run_pose(args)
+            print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
+            return 0
+        if args.command == "edit":
+            result = _run_edit(args)
             print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
             return 0
         if args.command == "convert":

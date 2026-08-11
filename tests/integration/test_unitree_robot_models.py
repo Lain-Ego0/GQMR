@@ -12,7 +12,12 @@ from gqmr.core.io import load_motion, save_motion
 from gqmr.core.motion import RobotMotion, SolverStatus
 from gqmr.exporters import load_isaaclab_amp_v232
 from gqmr.exporters.isaaclab_amp import export_isaaclab_amp_v232
-from gqmr.retarget import replay_quality_report, retarget_fast
+from gqmr.retarget import (
+    replay_quality_report,
+    retarget_fast,
+    retarget_high_quality,
+    simulate_pd_tracking,
+)
 from gqmr.robots import LEG_ORDER, load_robot_model
 from gqmr.synthetic import generate_dog27_motion
 from gqmr.stream import (
@@ -381,3 +386,33 @@ def test_mujoco_stream_rejects_wrong_model_hash() -> None:
     finally:
         recorder.close()
         publisher.close()
+
+
+@pytest.mark.parametrize("gait", ["walk", "trot", "pace"])
+def test_high_quality_contact_lock_reduces_sliding(gait: str) -> None:
+    robot = load_robot_model("unitree-go2", cache_dir=_asset_cache())
+    animal = generate_dog27_motion(gait, duration=1.0, fps=60.0)
+    fast, _ = retarget_fast(animal, robot)
+    refined, _ = retarget_high_quality(animal, robot)
+
+    fast_report = replay_quality_report(fast, robot)
+    refined_report = replay_quality_report(refined, robot)
+    assert refined_report["valid_frame_ratio"] >= 0.995
+    assert refined_report["joint_limit_violation_frames"] == 0
+    assert refined_report["mean_contact_foot_speed_mps"] <= (
+        0.5 * fast_report["mean_contact_foot_speed_mps"]
+    )
+
+
+def test_pd_dynamics_report_is_explicitly_diagnostic() -> None:
+    robot = load_robot_model("unitree-go2", cache_dir=_asset_cache())
+    animal = generate_dog27_motion("trot", duration=0.2, fps=60.0)
+    motion, _ = retarget_fast(animal, robot)
+
+    report = simulate_pd_tracking(motion, robot)
+
+    assert report["simulated_steps"] > 0
+    assert np.isfinite(report["root_tracking_rmse_m"])
+    assert np.isfinite(report["joint_tracking_rmse_rad"])
+    assert report["peak_actuator_command_max"] >= 0.0
+    assert report["claim"] == "diagnostic_pd_tracking_only"

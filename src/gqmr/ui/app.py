@@ -33,7 +33,7 @@ from gqmr.core.io import load_motion, save_motion
 from gqmr.core.motion import AnimalMotion, RobotMotion
 from gqmr.exporters import export_deepmimic_json, export_isaaclab_amp_v232
 from gqmr.project import add_resource, load_project, new_project, pack_project, save_project
-from gqmr.retarget import replay_quality_report, retarget_fast
+from gqmr.retarget import replay_quality_report, retarget_fast, retarget_high_quality
 from gqmr.robots import load_robot_model
 from gqmr.sources.files import load_legacy_dog27
 from gqmr.synthetic import generate_dog27_motion
@@ -94,12 +94,15 @@ class MainWindow(QMainWindow):
         retarget_layout = QFormLayout(retarget_group)
         self.robot_combo = QComboBox()
         self.robot_combo.addItems(["unitree-go2", "unitree-b2"])
+        self.retarget_mode = QComboBox()
+        self.retarget_mode.addItems(["快速 DLS", "高质量接触锁定"])
         self.cache_edit = QLineEdit()
         self.cache_edit.setPlaceholderText("留空使用 GQMR 默认资产缓存")
         self.retarget_button = QPushButton("运行快速 DLS 重定向")
         self.cancel_button = QPushButton("取消任务")
         self.cancel_button.setEnabled(False)
         retarget_layout.addRow("机器人", self.robot_combo)
+        retarget_layout.addRow("求解模式", self.retarget_mode)
         retarget_layout.addRow("资产缓存", self.cache_edit)
         retarget_layout.addRow(self.retarget_button)
         retarget_layout.addRow(self.cancel_button)
@@ -266,10 +269,16 @@ class MainWindow(QMainWindow):
         animal = self.animal_motion
         robot_id = self.robot_combo.currentText()
         cache = self._cache_dir()
+        high_quality = self.retarget_mode.currentIndex() == 1
 
         def work(token):
             robot = load_robot_model(robot_id, cache_dir=cache)
-            return robot, *retarget_fast(animal, robot)
+            result = (
+                retarget_high_quality(animal, robot)
+                if high_quality
+                else retarget_fast(animal, robot)
+            )
+            return robot, *result
 
         def complete(result) -> None:
             robot, motion, diagnostics = result

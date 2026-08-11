@@ -6,7 +6,9 @@ from datetime import datetime, timezone
 import numpy as np
 import pytest
 
-from gqmr.editing import EditStack, apply_edit
+from gqmr.editing import EditStack, apply_edit, make_robot_loop
+from gqmr.core.coordinates import quaternion_geodesic_distance
+from test_motion_io import make_robot_motion
 from gqmr.project.model import EditCommand
 from gqmr.synthetic import generate_dog27_motion
 
@@ -62,3 +64,32 @@ def test_resample_and_undo_redo_are_deterministic() -> None:
     redone = stack.redo()
     assert np.array_equal(redone.positions, edited.positions)
     assert redone.metadata["edit_history"] == edited.metadata["edit_history"]
+
+
+def test_robot_loop_closes_rotation_and_dofs() -> None:
+    motion = make_robot_motion()
+    root_position = motion.root_position.copy()
+    root_position[-1] = [1.0, 0.2, 0.1]
+    dof_position = motion.dof_position.copy()
+    dof_position[-1] = [0.2, -0.1]
+    motion = motion.__class__(
+        timestamps=motion.timestamps,
+        dof_names=motion.dof_names,
+        root_position=root_position,
+        root_rotation=motion.root_rotation,
+        dof_position=dof_position,
+        root_linear_velocity=motion.root_linear_velocity,
+        root_angular_velocity=motion.root_angular_velocity,
+        dof_velocity=motion.dof_velocity,
+        foot_contact_probability=motion.foot_contact_probability,
+        frame_valid=motion.frame_valid,
+        solver_status=motion.solver_status,
+        solver_residual=motion.solver_residual,
+        metadata=motion.metadata,
+    )
+    loop = make_robot_loop(motion)
+
+    assert float(quaternion_geodesic_distance(loop.root_rotation[0], loop.root_rotation[-1])) < np.deg2rad(1.0)
+    assert np.max(np.abs(loop.dof_position[-1] - loop.dof_position[0])) < 0.03
+    assert loop.root_position[-1, 0] == 1.0
+    assert np.allclose(loop.root_position[-1, 1:], loop.root_position[0, 1:])
