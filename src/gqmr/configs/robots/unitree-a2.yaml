@@ -1,0 +1,28 @@
+schema_version: 1
+id: unitree-a2
+asset_id: unitree-a2
+model: unitree_robots/a2/a2.xml
+model_sha256: bb95734d539a07c38e40bd3b3f96bf3d81b8d3fc746ed94508ea0639753f452b
+root_joint: floating_base_joint
+base_body: base_link
+dof_order:
+  - FL_hip_joint
+  - FL_thigh_joint
+  - FL_calf_joint
+  - FR_hip_joint
+  - FR_thigh_joint
+  - FR_calf_joint
+  - RL_hip_joint
+  - RL_thigh_joint
+  - RL_calf_joint
+  - RR_hip_joint
+  - RR_thigh_joint
+  - RR_calf_joint
+feet:
+  FL: {body: FL_calf, local_position: [0.0, 0.0, -0.275], contact_geoms: []}
+  FR: {body: FR_calf, local_position: [0.0, 0.0, -0.275], contact_geoms: []}
+  RL: {body: RL_calf, local_position: [0.0, 0.0, -0.275], contact_geoms: []}
+  RR: {body: RR_calf, local_position: [0.0, 0.0, -0.275], contact_geoms: []}
+default_root_position: [0.0, 0.0, 0.342]
+default_root_rotation: [1.0, 0.0, 0.0, 0.0]
+default_dof_position: [0.0, 0.9, -1.8, 0.0, 0.9, -1.8, 0.0, 0.9, -1.8, 0.0, 0.9, -1.8]

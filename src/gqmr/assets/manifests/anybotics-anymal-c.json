@@ -1,0 +1,251 @@
+{
+  "schema_id": "gqmr.asset_manifest",
+  "schema_version": 1,
+  "asset_id": "anybotics-anymal-c",
+  "display_name": "ANYmal C (ANYbotics / ETH lineage)",
+  "source": {
+    "repository": "https://github.com/google-deepmind/mujoco_menagerie",
+    "commit": "da76818e269b82289eba39808e2fb91d679d6994",
+    "archive_url": "https://github.com/google-deepmind/mujoco_menagerie/archive/da76818e269b82289eba39808e2fb91d679d6994.tar.gz",
+    "archive_sha256": "b03591082fc46b4334d79785b6cc24864c6d6cda8be6947b87a0f4f5e731d7f5",
+    "archive_prefix": "mujoco_menagerie-da76818e269b82289eba39808e2fb91d679d6994/"
+  },
+  "license": {
+    "spdx": "BSD-3-Clause",
+    "path": "anybotics_anymal_c/LICENSE"
+  },
+  "model_path": "anybotics_anymal_c/scene.xml",
+  "model_sha256": "f5f157a9874cfdfc0b415dae90751a7270c872cf371a8e78a34f20138593fd7b",
+  "files": [
+    {
+      "path": "anybotics_anymal_c/LICENSE",
+      "sha256": "de5f42e8397f2e1c2339f41b00d2e4e64d09ad8c5b9251be9388445ae7f6b41d",
+      "size": 1477
+    },
+    {
+      "path": "anybotics_anymal_c/anymal_c.xml",
+      "sha256": "25dfeab8913aff6f69877a85faa5f2dfa15c56a0d553cd99dbd46a4584067d8b",
+      "size": 18768
+    },
+    {
+      "path": "anybotics_anymal_c/assets/base.png",
+      "sha256": "c85872e7e662dbfe342b7450d9be8332dbe9da3cc46e73e5c44960d1bd6f1b97",
+      "size": 596390
+    },
+    {
+      "path": "anybotics_anymal_c/assets/base_0.obj",
+      "sha256": "72ce71522d12cbea774fc53b21114571b540ea2a4601ea002be8010cef882671",
+      "size": 8494
+    },
+    {
+      "path": "anybotics_anymal_c/assets/base_1.obj",
+      "sha256": "a3a47ce38a65d1502db9385a8f7946ad60befb67be3ec08ce9b5349ee8628aed",
+      "size": 56342
+    },
+    {
+      "path": "anybotics_anymal_c/assets/base_2.obj",
+      "sha256": "9d9ef6510bdb9e7e3d0607d4132bd1a2d2c4b9f058acec88c81b48bb03fc2b84",
+      "size": 47409
+    },
+    {
+      "path": "anybotics_anymal_c/assets/base_3.obj",
+      "sha256": "7a3c6829dc3ff2b4889df63df3f0fd5a380499f2ef6d6ab56fdb724d9bab5fc2",
+      "size": 408386
+    },
+    {
+      "path": "anybotics_anymal_c/assets/base_4.obj",
+      "sha256": "5ffc5f36cfc0ad40066294b743de56c10effe1089eca0010a22e3675e92d3de7",
+      "size": 44276
+    },
+    {
+      "path": "anybotics_anymal_c/assets/base_5.obj",
+      "sha256": "6672630cecff1b3aa731ef04e4035158bf1553aaa9a305791891bf4bfe429f93",
+      "size": 27761
+    },
+    {
+      "path": "anybotics_anymal_c/assets/battery.obj",
+      "sha256": "14055cc0a83b9e3d3d11dbbe68927bd643760220f11a0ec3a344af2018e11aca",
+      "size": 1724
+    },
+    {
+      "path": "anybotics_anymal_c/assets/battery.png",
+      "sha256": "4376d81adfc74952fa436d818c3a6265758e592f1bfe0aefc518eb689410bd41",
+      "size": 217165
+    },
+    {
+      "path": "anybotics_anymal_c/assets/bottom_shell.obj",
+      "sha256": "81dee5e360c21ed46d17e0bac1a63b4f8f1b16abc525bbba58a3affe83c6343d",
+      "size": 727634
+    },
+    {
+      "path": "anybotics_anymal_c/assets/bottom_shell.png",
+      "sha256": "e8f5017a1e5d37262c20f124c59baf7eebc00b30b3011eb14480664a80aa8e61",
+      "size": 706714
+    },
+    {
+      "path": "anybotics_anymal_c/assets/depth_camera.obj",
+      "sha256": "d9a33307c7bc1774dab3ef98d203c50a02b7f28a948f1be98a54741c97843f2c",
+      "size": 1720
+    },
+    {
+      "path": "anybotics_anymal_c/assets/depth_camera.png",
+      "sha256": "0528317164108af038c4cf95401f2960d2a7ed40ec74d2a840dd12eba50450a4",
+      "size": 661987
+    },
+    {
+      "path": "anybotics_anymal_c/assets/drive.obj",
+      "sha256": "4f537162db7fe80e1cbf70eb239c7ad6257f226e8da15713981ae978deab0606",
+      "size": 17973
+    },
+    {
+      "path": "anybotics_anymal_c/assets/drive.png",
+      "sha256": "a7bfe1e5a04b617bab07544e0856cc92003a368624f827a46c6be756c4bf3d9b",
+      "size": 558330
+    },
+    {
+      "path": "anybotics_anymal_c/assets/face.obj",
+      "sha256": "ae0fe279f9d4bb9903d85f65ffd508fa9440af34793537b411bfef4bd40b1995",
+      "size": 405295
+    },
+    {
+      "path": "anybotics_anymal_c/assets/face.png",
+      "sha256": "0d71ddc915f9a8baf0f225669a576ca27263e9bad9474b847bb0762fa7a2bcde",
+      "size": 1391179
+    },
+    {
+      "path": "anybotics_anymal_c/assets/foot.obj",
+      "sha256": "bea4989f973561f468bda26e1ca062b13df03b1be813aa7c57db1b1039bcd6e6",
+      "size": 59343
+    },
+    {
+      "path": "anybotics_anymal_c/assets/foot.png",
+      "sha256": "1a63a3f3ddb77cfa56189dd3bc30fadea1f04d3464695b8533de02d94ba490cd",
+      "size": 628089
+    },
+    {
+      "path": "anybotics_anymal_c/assets/handle.obj",
+      "sha256": "04ebd8554ef96021923511f58520e8f216c1f57d83f665a3b23c88588b0da8fb",
+      "size": 19615
+    },
+    {
+      "path": "anybotics_anymal_c/assets/handle.png",
+      "sha256": "ed0ea6805961b41904f94398c783115e4cff71cf0e887a3fca3e5fa60c0972ef",
+      "size": 478198
+    },
+    {
+      "path": "anybotics_anymal_c/assets/hatch.obj",
+      "sha256": "b1f5cd8f322dba16d45f39b095f7f313ef1e17f785d3c2b189ecfed18f9a6c77",
+      "size": 5804
+    },
+    {
+      "path": "anybotics_anymal_c/assets/hatch.png",
+      "sha256": "2a22cbfef3bf5d305dc9f2c429b44f7a914144151ff95fece1db8f7abd157cda",
+      "size": 209268
+    },
+    {
+      "path": "anybotics_anymal_c/assets/hip_l.obj",
+      "sha256": "3eba208035323fcabc5bdfcdc8c45141705bf1aa0e4f6c1562b53351433fbe31",
+      "size": 27957
+    },
+    {
+      "path": "anybotics_anymal_c/assets/hip_l.png",
+      "sha256": "c7a3207c0f541a418241e5027c7325d1774c1a558597dfac0d17fe59d2708d70",
+      "size": 910528
+    },
+    {
+      "path": "anybotics_anymal_c/assets/hip_r.obj",
+      "sha256": "f819e2c964d6e1cef9b2f4f78b80edfb094cb09de5c577472d3e6d72d81c9f9d",
+      "size": 28357
+    },
+    {
+      "path": "anybotics_anymal_c/assets/hip_r.png",
+      "sha256": "c7a3207c0f541a418241e5027c7325d1774c1a558597dfac0d17fe59d2708d70",
+      "size": 910528
+    },
+    {
+      "path": "anybotics_anymal_c/assets/lidar.obj",
+      "sha256": "052bc2763ee33917f185b97e08a3b18b586280c8b16f3038ed124f06e42d12af",
+      "size": 19993
+    },
+    {
+      "path": "anybotics_anymal_c/assets/lidar.png",
+      "sha256": "71977fe401550113b7ba2765b70a6d66431b31123a38d72c5ff88826b27425e1",
+      "size": 664599
+    },
+    {
+      "path": "anybotics_anymal_c/assets/lidar_cage.obj",
+      "sha256": "062d7bb73b9851f49da56fdb6d61d88d1785ccb4eec5da540378c04dd966b7f3",
+      "size": 68929
+    },
+    {
+      "path": "anybotics_anymal_c/assets/lidar_cage.png",
+      "sha256": "428af55b37f4ae3a91288cc7e4d5153671ff5df38442d9af4807653a27a5b0a3",
+      "size": 1099654
+    },
+    {
+      "path": "anybotics_anymal_c/assets/remote.obj",
+      "sha256": "4adb2625193d97fbe366dee61482cc754e0605687db4d8037c0903a960f61fcc",
+      "size": 40860
+    },
+    {
+      "path": "anybotics_anymal_c/assets/remote.png",
+      "sha256": "98f7c8faae8653e3ece45f67d2f420cd64a647bc41d52183d1411f3e97a39115",
+      "size": 186422
+    },
+    {
+      "path": "anybotics_anymal_c/assets/shank_l.obj",
+      "sha256": "c8b9327bd8985c8239d63bfe8cd79a6848bab8c327e863ecccd854736ef2eefe",
+      "size": 316317
+    },
+    {
+      "path": "anybotics_anymal_c/assets/shank_l.png",
+      "sha256": "3abf0f871f65b66a330c09655797f1feb5332993112f888ca17d082decdce823",
+      "size": 590323
+    },
+    {
+      "path": "anybotics_anymal_c/assets/shank_r.obj",
+      "sha256": "75a0a2233d2549ea5cc92d069d702b90cda14061756f8562886e859e84360dde",
+      "size": 319809
+    },
+    {
+      "path": "anybotics_anymal_c/assets/shank_r.png",
+      "sha256": "3abf0f871f65b66a330c09655797f1feb5332993112f888ca17d082decdce823",
+      "size": 590323
+    },
+    {
+      "path": "anybotics_anymal_c/assets/thigh.obj",
+      "sha256": "bffa716b73791f8bac4cb27ded83a606be324b4ac9887bd50ee5c441560638e3",
+      "size": 307758
+    },
+    {
+      "path": "anybotics_anymal_c/assets/thigh.png",
+      "sha256": "35875b0cdaf9669493143a28dc6cbab919d4e9429313b530976f1e8ae3f9cc4b",
+      "size": 897590
+    },
+    {
+      "path": "anybotics_anymal_c/assets/top_shell.obj",
+      "sha256": "2e4addfd7d041ed38df197517397c2fd23389ec0fa7116c8021a4b2710b5e43c",
+      "size": 647686
+    },
+    {
+      "path": "anybotics_anymal_c/assets/top_shell.png",
+      "sha256": "0d804ae204693933c470c674fe7192d1dd9262df056ab9d15e010678db80b7ed",
+      "size": 612686
+    },
+    {
+      "path": "anybotics_anymal_c/assets/wide_angle_camera.obj",
+      "sha256": "a827d67756f78a0fb9cfaf6c0d8b3b8458bdc793bc6d82bbd28a7557fc47f78c",
+      "size": 16618
+    },
+    {
+      "path": "anybotics_anymal_c/assets/wide_angle_camera.png",
+      "sha256": "15a07c60015de459965a2d7f1a7ad08e88f32c78fdbf4193b459a34f3af38ca5",
+      "size": 467975
+    },
+    {
+      "path": "anybotics_anymal_c/scene.xml",
+      "sha256": "5c9c72a3571734ef892b3b07504d350a6077bcd3810bcb722f6c4db665ddb9b2",
+      "size": 825
+    }
+  ]
+}

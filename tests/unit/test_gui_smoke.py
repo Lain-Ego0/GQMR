@@ -36,6 +36,13 @@ def test_gui_renders_go2_and_b2_models() -> None:
     application = QApplication.instance() or QApplication([])
     window = MainWindow()
     window.cache_edit.setText(str(asset_root or default_asset_root()))
+    assert {
+        window.robot_combo.itemData(index)
+        for index in range(window.robot_combo.count())
+    } == {
+        "unitree-go2", "unitree-go1", "unitree-a1", "unitree-a2",
+        "unitree-b2", "anybotics-anymal-c",
+    }
 
     go2_index = window.robot_combo.findData("unitree-go2")
     window.robot_combo.setCurrentIndex(go2_index)

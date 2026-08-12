@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from gqmr.assets.catalog import AssetFile, AssetSpec, get_asset_spec
+from gqmr.assets.catalog import AssetFile, AssetSpec, available_assets, get_asset_spec
 from gqmr.assets.manager import (
     default_asset_root,
     install_asset,
@@ -106,19 +106,21 @@ def fixture_asset(tmp_path: Path) -> tuple[Path, AssetSpec]:
 
 
 def test_builtin_manifests_are_internally_consistent() -> None:
-    go2 = get_asset_spec("unitree-go2")
-    b2 = get_asset_spec("unitree-b2")
-    assert len(go2.files) == 19
-    assert len(b2.files) == 34
-    assert go2.license_spdx == b2.license_spdx == "BSD-3-Clause"
-    assert go2.archive_sha256 == b2.archive_sha256
+    specs = {asset_id: get_asset_spec(asset_id) for asset_id in available_assets()}
+    assert set(specs) == {
+        "unitree-go2", "unitree-go1", "unitree-a1", "unitree-a2",
+        "unitree-b2", "anybotics-anymal-c",
+    }
+    assert all(spec.files for spec in specs.values())
+    assert all(spec.license_spdx == "BSD-3-Clause" for spec in specs.values())
+    assert specs["unitree-go2"].archive_sha256 == specs["unitree-a2"].archive_sha256
+    assert specs["unitree-a1"].archive_sha256 == specs["anybotics-anymal-c"].archive_sha256
 
 
 def test_repository_assets_are_the_verified_default() -> None:
     repository = Path(__file__).resolve().parents[2]
     assert default_asset_root() == repository
-    assert status_asset("unitree-go2").valid
-    assert status_asset("unitree-b2").valid
+    assert all(status_asset(asset_id).valid for asset_id in available_assets())
 
 
 def test_install_status_corruption_repair_and_offline_round_trip(

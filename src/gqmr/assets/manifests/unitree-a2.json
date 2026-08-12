@@ -1,0 +1,116 @@
+{
+  "schema_id": "gqmr.asset_manifest",
+  "schema_version": 1,
+  "asset_id": "unitree-a2",
+  "display_name": "Unitree A2",
+  "source": {
+    "repository": "https://github.com/unitreerobotics/unitree_mujoco",
+    "commit": "ae6a8403e272733e9996ef59990880330496177f",
+    "archive_url": "https://github.com/unitreerobotics/unitree_mujoco/archive/ae6a8403e272733e9996ef59990880330496177f.tar.gz",
+    "archive_sha256": "824a51b228c317348866180b1214ed736621d2163006d682156d54b6a55da711",
+    "archive_prefix": "unitree_mujoco-ae6a8403e272733e9996ef59990880330496177f/"
+  },
+  "license": {
+    "spdx": "BSD-3-Clause",
+    "path": "LICENSE"
+  },
+  "model_path": "unitree_robots/a2/a2.xml",
+  "model_sha256": "bb95734d539a07c38e40bd3b3f96bf3d81b8d3fc746ed94508ea0639753f452b",
+  "files": [
+    {
+      "path": "LICENSE",
+      "sha256": "a5d73fc4aca9074e3e6fe0b1a0ba763cf9514b2249b7390ed20fe8d53630bf25",
+      "size": 1559
+    },
+    {
+      "path": "unitree_robots/a2/a2.xml",
+      "sha256": "ece5cf9ab9bc8424ab2d1e4a7e54c5113aedabe9d0ecbfafae8588ae8daad6c5",
+      "size": 18213
+    },
+    {
+      "path": "unitree_robots/a2/meshes/base_link.STL",
+      "sha256": "8d63bf204cc935a7df7415d31bfb953f3ded653899b6b27bbf0268fc363e5904",
+      "size": 3421184
+    },
+    {
+      "path": "unitree_robots/a2/meshes/left_front_Link1.STL",
+      "sha256": "386cc25336de29f5d397424dc807abdc3551935dfe006ee66f5c2d44cee95155",
+      "size": 249684
+    },
+    {
+      "path": "unitree_robots/a2/meshes/left_front_Link2.STL",
+      "sha256": "2106e36d6cb839b944707793d7be01c4a37181333797aa60fc00a4e45dc3a148",
+      "size": 548484
+    },
+    {
+      "path": "unitree_robots/a2/meshes/left_front_Link3.STL",
+      "sha256": "26a39dfaf784d9fe16019690e0d4e766232a2117453b7884cab3f3d81ec3ff5b",
+      "size": 310484
+    },
+    {
+      "path": "unitree_robots/a2/meshes/left_front_Link4.STL",
+      "sha256": "033aae39b32d50eaf1c034a887dbd61b90b9aade3d9e76d817d8832152737570",
+      "size": 1719884
+    },
+    {
+      "path": "unitree_robots/a2/meshes/left_hind_Link1.STL",
+      "sha256": "d4b121e9382c7735ab60d32dda444ca48f278cea74b21ec94ac54a8032c75ce0",
+      "size": 249684
+    },
+    {
+      "path": "unitree_robots/a2/meshes/left_hind_Link2.STL",
+      "sha256": "d62c468ae60f5f17daa39d8ed104bdd7b6b0cec460dfe5712db2a041f14e1a3f",
+      "size": 548484
+    },
+    {
+      "path": "unitree_robots/a2/meshes/left_hind_Link3.STL",
+      "sha256": "bf0ce4ee36d62f2301796ed390252b65d0b637502e79dae2446132201ef62e23",
+      "size": 310484
+    },
+    {
+      "path": "unitree_robots/a2/meshes/left_hind_Link4.STL",
+      "sha256": "bb913b7637a5e3d252efa7e71e4af3be63658f699a2401b29f2a059bc0ae6326",
+      "size": 1719884
+    },
+    {
+      "path": "unitree_robots/a2/meshes/right_front_Link1.STL",
+      "sha256": "722ad81adc6501a41469fd1c4d9a99d935b15662b631a206fe5b748a0d6eee52",
+      "size": 249684
+    },
+    {
+      "path": "unitree_robots/a2/meshes/right_front_Link2.STL",
+      "sha256": "ea81193979699f476db044cc3e51921100b423de60fde28f74e99c0b94408616",
+      "size": 547484
+    },
+    {
+      "path": "unitree_robots/a2/meshes/right_front_Link3.STL",
+      "sha256": "5fc735e0a33aed6e3d68d73323d58450eb4179a17be460afcf28969ecfb70fbe",
+      "size": 310484
+    },
+    {
+      "path": "unitree_robots/a2/meshes/right_front_Link4.STL",
+      "sha256": "27871fb73330654fdafa682b5c7d0722f59462e4696ed05b870c072a31eba75d",
+      "size": 1719884
+    },
+    {
+      "path": "unitree_robots/a2/meshes/right_hind_Link1.STL",
+      "sha256": "cc9c733858fcd8dc0347329e3187c060b20ab5f7b34ddc61cf16c5d1b1d842a1",
+      "size": 249684
+    },
+    {
+      "path": "unitree_robots/a2/meshes/right_hind_Link2.STL",
+      "sha256": "21a3bbfa7edb7116d34be42fed84d0bfbf4ef95f000c5a8c243398046d891889",
+      "size": 547484
+    },
+    {
+      "path": "unitree_robots/a2/meshes/right_hind_Link3.STL",
+      "sha256": "618152ab154f41c1b6ac9a056c800fa52e6861d7f74c180cf3e4bc3b65415ebf",
+      "size": 310484
+    },
+    {
+      "path": "unitree_robots/a2/meshes/right_hind_Link4.STL",
+      "sha256": "dee1269d94e2ae521058b842ba33f48eaec435317515c7b169076386ca5756d9",
+      "size": 1719884
+    }
+  ]
+}

@@ -1,0 +1,61 @@
+{
+  "schema_id": "gqmr.asset_manifest",
+  "schema_version": 1,
+  "asset_id": "unitree-go1",
+  "display_name": "Unitree Go1",
+  "source": {
+    "repository": "https://github.com/google-deepmind/mujoco_menagerie",
+    "commit": "da76818e269b82289eba39808e2fb91d679d6994",
+    "archive_url": "https://github.com/google-deepmind/mujoco_menagerie/archive/da76818e269b82289eba39808e2fb91d679d6994.tar.gz",
+    "archive_sha256": "b03591082fc46b4334d79785b6cc24864c6d6cda8be6947b87a0f4f5e731d7f5",
+    "archive_prefix": "mujoco_menagerie-da76818e269b82289eba39808e2fb91d679d6994/"
+  },
+  "license": {
+    "spdx": "BSD-3-Clause",
+    "path": "unitree_go1/LICENSE"
+  },
+  "model_path": "unitree_go1/scene.xml",
+  "model_sha256": "0cfd67727202a1b3a82071792eaaadaca2ecd1339b2bf2b4d9cd3c5e884f7f1e",
+  "files": [
+    {
+      "path": "unitree_go1/LICENSE",
+      "sha256": "2b794acf1e250f5545ae5a47d81e5685ea5488ce077d1087ed8be5f81e9ba5c0",
+      "size": 1559
+    },
+    {
+      "path": "unitree_go1/assets/calf.stl",
+      "sha256": "ad3685e132454fd64e4ca3e5089f0d812fb53958e95c14913a22e3193e9e9ed8",
+      "size": 1447984
+    },
+    {
+      "path": "unitree_go1/assets/hip.stl",
+      "sha256": "b6599b9dd2751ebd87449203223f5683a6c235268b76fcc443e00e0d974a06c0",
+      "size": 1505284
+    },
+    {
+      "path": "unitree_go1/assets/thigh.stl",
+      "sha256": "bbf7c0a441323088c59276dbec8a32e708a1c61f42d30a6f6775176366ea23f8",
+      "size": 793584
+    },
+    {
+      "path": "unitree_go1/assets/thigh_mirror.stl",
+      "sha256": "1a90b89de47a57cb12a2d703f6b008a6ace8a1890a381c27723296fd0d00b9d8",
+      "size": 950834
+    },
+    {
+      "path": "unitree_go1/assets/trunk.stl",
+      "sha256": "051a57995dc6f892fc9bc53cd94e9a894f3dc209fd646e94d55d764150013970",
+      "size": 5619284
+    },
+    {
+      "path": "unitree_go1/go1.xml",
+      "sha256": "d5a7466784c8e72fd174cc7fa5a92754a1a0a6d458a1dec79e7ca0abc9525c4a",
+      "size": 10875
+    },
+    {
+      "path": "unitree_go1/scene.xml",
+      "sha256": "eceb4231bf2a3b0a190296963b38b904ed77dc14f5770bbcdd67fb0be8c49374",
+      "size": 815
+    }
+  ]
+}

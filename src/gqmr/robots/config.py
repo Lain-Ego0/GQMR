@@ -16,7 +16,14 @@ from gqmr.core.errors import GQMRError
 
 Leg = Literal["FL", "FR", "RL", "RR"]
 LEG_ORDER: tuple[Leg, ...] = ("FL", "FR", "RL", "RR")
-_BUILTIN_ROBOTS = ("unitree-go2", "unitree-b2")
+_BUILTIN_ROBOTS = (
+    "unitree-go2",
+    "unitree-go1",
+    "unitree-a1",
+    "unitree-a2",
+    "unitree-b2",
+    "anybotics-anymal-c",
+)
 _HEX = frozenset("0123456789abcdef")
 
 

@@ -20,7 +20,7 @@ from gqmr.retarget import (
     retarget_high_quality,
     simulate_pd_tracking,
 )
-from gqmr.robots import LEG_ORDER, load_robot_model
+from gqmr.robots import LEG_ORDER, available_robot_configs, load_robot_model
 from gqmr.synthetic import generate_dog27_motion
 from gqmr.stream import (
     GQMRPublisher,
@@ -82,6 +82,28 @@ def _analytic_default_feet(robot_id: str) -> np.ndarray:
         position = position + rotation @ np.array([0.0, 0.0, -lower])
         result.append(position)
     return np.stack(result)
+
+
+@pytest.mark.parametrize("robot_id", available_robot_configs())
+def test_all_builtin_robot_models_load_and_bind(robot_id: str) -> None:
+    robot = load_robot_model(robot_id, cache_dir=_asset_cache())
+    assert (robot.model.nq, robot.model.nv, robot.model.nu) == (19, 18, 12)
+    assert robot.foot_positions().shape == (4, 3)
+    assert np.all(np.isfinite(robot.foot_positions()))
+    assert set(robot.feet) == set(LEG_ORDER)
+
+
+@pytest.mark.parametrize(
+    "robot_id", ["unitree-go1", "unitree-a1", "unitree-a2", "anybotics-anymal-c"]
+)
+def test_added_robot_models_retarget_synthetic_trot(robot_id: str) -> None:
+    robot = load_robot_model(robot_id, cache_dir=_asset_cache())
+    animal = generate_dog27_motion("trot", duration=0.35, fps=30.0)
+    motion, _ = retarget_fast(animal, robot)
+    report = replay_quality_report(motion, robot)
+    assert np.mean(motion.frame_valid) == 1.0
+    assert report["joint_limit_violation_frames"] == 0
+    assert report["replayed_frames"] == motion.frame_count
 
 
 @pytest.mark.parametrize("robot_id", ["unitree-go2", "unitree-b2"])

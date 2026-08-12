@@ -33,7 +33,7 @@ from PySide6.QtWidgets import (
 )
 
 from gqmr import __version__
-from gqmr.assets import default_asset_root
+from gqmr.assets import default_asset_root, get_asset_spec
 from gqmr.core.io import load_motion, save_motion
 from gqmr.core.motion import AnimalMotion, RobotMotion
 from gqmr.editing import EditStack, filter_robot_motion, make_robot_loop
@@ -48,7 +48,7 @@ from gqmr.project import (
 )
 from gqmr.project.model import EditCommand
 from gqmr.retarget import replay_quality_report, retarget_fast, retarget_high_quality
-from gqmr.robots import load_robot_model
+from gqmr.robots import available_robot_configs, load_robot_model
 from gqmr.sources.files import load_legacy_dog27
 from gqmr.synthetic import generate_dog27_motion
 from gqmr.ui.preview import MotionPreview
@@ -136,8 +136,8 @@ class MainWindow(QMainWindow):
         retarget_layout.setHorizontalSpacing(10)
         retarget_layout.setVerticalSpacing(10)
         self.robot_combo = QComboBox()
-        self.robot_combo.addItem("Unitree Go2", "unitree-go2")
-        self.robot_combo.addItem("Unitree B2", "unitree-b2")
+        for robot_id in available_robot_configs():
+            self.robot_combo.addItem(get_asset_spec(robot_id).display_name, robot_id)
         self.retarget_mode = QComboBox()
         self.retarget_mode.addItem("快速（适合预览）", "fast")
         self.retarget_mode.addItem("高质量（接触优化）", "high-quality")
@@ -281,7 +281,7 @@ class MainWindow(QMainWindow):
             "General Quadruped Motion Retargeting\n"
             "GQMR: MIT License\n"
             "PySide6 / Qt / shiboken6: LGPL-3.0 (dynamic libraries)\n"
-            "MuJoCo: Apache-2.0; Unitree assets: BSD-3-Clause\n\n"
+            "MuJoCo: Apache-2.0; Unitree / ANYmal assets: BSD-3-Clause\n\n"
             "完整第三方说明见 docs/THIRD_PARTY_LICENSES.md",
         )
 

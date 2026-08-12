@@ -7,13 +7,13 @@ General Quadruped Motion Retargeting
 
 项目的完整实施路线见 [GQMR 四足快速运动重定向工具实施计划](docs/IMPLEMENTATION_PLAN.md)。
 
-当前已实现 Motion Schema v1、安全 NPZ I/O、Unitree 可信资产、dog-27 输入、Go2/B2 快速与高质量重定向、MuJoCo 回放、AMP/DeepMimic 导出、`.gqmr` 工程、PySide6 GUI、流式录制、通用/DLC/SLEAP 姿态文件和多目三角化。实际完成度、验证结果与已知问题见 [实施状态](docs/IMPLEMENTATION_STATUS.md)。
+当前已实现 Motion Schema v1、安全 NPZ I/O、可信机器人资产、dog-27 输入、多机型快速与高质量重定向、MuJoCo 回放、AMP/DeepMimic 导出、`.gqmr` 工程、PySide6 GUI、流式录制、通用/DLC/SLEAP 姿态文件和多目三角化。内置支持 Unitree Go2/Go1/A1/A2/B2 和 ANYmal C。实际完成度、验证结果与已知问题见 [实施状态](docs/IMPLEMENTATION_STATUS.md)。
 
-GUI 会直接渲染 Go2/B2 的 MuJoCo mesh，并随时间轴更新机器人姿态；在模型区域拖动可旋转视角，滚轮可缩放。
+GUI 会直接渲染六种内置机器人的 MuJoCo mesh，并随时间轴更新机器人姿态；在模型区域拖动可旋转视角，滚轮可缩放。
 
 ## 启动与使用
 
-使用已提交的锁文件安装。仓库 `assets/` 已包含 Go2/B2 完整 MuJoCo 模型和 mesh，无需首次下载：
+使用已提交的锁文件安装。仓库 `assets/` 已包含六种内置机器人的完整 MuJoCo 模型和 mesh，无需首次下载：
 
 ```bash
 uv sync --frozen --extra test
@@ -22,9 +22,9 @@ uv run gqmr assets status
 uv run gqmr gui
 ```
 
-GUI 中点击“使用示例”，选择 Go2 或 B2，并将“处理方式”切换为“高质量（接触优化）”，再点击“开始重定向”。预览区显示真实 MuJoCo mesh；拖动旋转视角，滚轮缩放，底部时间轴查看各步态相位。
+GUI 中点击“使用示例”，选择任意内置机器人，并将“处理方式”切换为“高质量（接触优化）”，再点击“开始重定向”。预览区显示真实 MuJoCo mesh；拖动旋转视角，滚轮缩放，底部时间轴查看各步态相位。
 
-默认资产根目录是仓库根目录，完整模型位于 `GQMR/assets/<asset_id>/<commit>/`。如果 Go2/B2 区域提示资产不可用，执行 `gqmr assets status`检查逐文件哈希。自定义位置使用 `--asset-root`；旧的 `--cache-dir` 参数仅作兼容别名保留。
+默认资产根目录是仓库根目录，完整模型位于 `GQMR/assets/<asset_id>/<commit>/`。如果机器人区域提示资产不可用，执行 `gqmr assets status`检查逐文件哈希。自定义位置使用 `--asset-root`；旧的 `--cache-dir` 参数仅作兼容别名保留。
 
 最短演示闭环：
 

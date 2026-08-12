@@ -1,7 +1,7 @@
 # GQMR Asset Manifest v1
 
 > 状态：实施协议 v1  
-> 适用资产：`unitree-go2`、`unitree-b2`
+> 适用资产：所有内置机器人资产
 
 ## 1. 可信根
 
@@ -11,6 +11,11 @@
 repository:     https://github.com/unitreerobotics/unitree_mujoco
 commit:         ae6a8403e272733e9996ef59990880330496177f
 archive_sha256: 824a51b228c317348866180b1214ed736621d2163006d682156d54b6a55da711
+license:        BSD-3-Clause
+
+repository:     https://github.com/google-deepmind/mujoco_menagerie
+commit:         da76818e269b82289eba39808e2fb91d679d6994
+archive_sha256: b03591082fc46b4334d79785b6cc24864c6d6cda8be6947b87a0f4f5e731d7f5
 license:        BSD-3-Clause
 ```
 
@@ -61,7 +66,11 @@ ASCII(decimal_size) + LF
 | 资产 | `model_sha256` |
 |---|---|
 | Unitree Go2 | `48baeb791c25c3fdaca0163c614145ade0e29d710ee9fcce9d8a5f551e3ca2e1` |
+| Unitree Go1 | `0cfd67727202a1b3a82071792eaaadaca2ecd1339b2bf2b4d9cd3c5e884f7f1e` |
+| Unitree A1 | `931a4e0caa84957dfebd865c63490725a7db3333e58bbfbc5c4d76d71af8c528` |
+| Unitree A2 | `bb95734d539a07c38e40bd3b3f96bf3d81b8d3fc746ed94508ea0639753f452b` |
 | Unitree B2 | `2ebeb90cb3cee67b4ae37e719244454b854719db126d9394ed89d3f0c9ec76e5` |
+| ANYmal C | `f5f157a9874cfdfc0b415dae90751a7270c872cf371a8e78a34f20138593fd7b` |
 
 `RobotMotion.metadata_json.model_sha256`、模型绑定、回放和导出都使用此值。
 

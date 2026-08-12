@@ -11,7 +11,14 @@ from typing import Any, Mapping
 
 from gqmr.core.errors import AssetError
 
-_ASSET_IDS = ("unitree-go2", "unitree-b2")
+_ASSET_IDS = (
+    "unitree-go2",
+    "unitree-go1",
+    "unitree-a1",
+    "unitree-a2",
+    "unitree-b2",
+    "anybotics-anymal-c",
+)
 _HEX = frozenset("0123456789abcdef")
 
 

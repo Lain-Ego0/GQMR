@@ -1,0 +1,28 @@
+schema_version: 1
+id: anybotics-anymal-c
+asset_id: anybotics-anymal-c
+model: anybotics_anymal_c/scene.xml
+model_sha256: f5f157a9874cfdfc0b415dae90751a7270c872cf371a8e78a34f20138593fd7b
+root_joint: $root
+base_body: base
+dof_order:
+  - LF_HAA
+  - LF_HFE
+  - LF_KFE
+  - RF_HAA
+  - RF_HFE
+  - RF_KFE
+  - LH_HAA
+  - LH_HFE
+  - LH_KFE
+  - RH_HAA
+  - RH_HFE
+  - RH_KFE
+feet:
+  FL: {body: LF_SHANK, local_position: [0.01305, -0.08795, -0.29222], contact_geoms: []}
+  FR: {body: RF_SHANK, local_position: [0.01305, 0.08795, -0.29222], contact_geoms: []}
+  RL: {body: LH_SHANK, local_position: [0.01305, 0.08795, -0.29222], contact_geoms: []}
+  RR: {body: RH_SHANK, local_position: [0.01305, -0.08795, -0.29222], contact_geoms: []}
+default_root_position: [0.0, 0.0, 0.403]
+default_root_rotation: [1.0, 0.0, 0.0, 0.0]
+default_dof_position: [0.0, 0.7, -1.4, 0.0, 0.7, -1.4, 0.0, -0.7, 1.4, 0.0, -0.7, 1.4]

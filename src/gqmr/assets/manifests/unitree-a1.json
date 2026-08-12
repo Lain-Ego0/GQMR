@@ -1,0 +1,66 @@
+{
+  "schema_id": "gqmr.asset_manifest",
+  "schema_version": 1,
+  "asset_id": "unitree-a1",
+  "display_name": "Unitree A1",
+  "source": {
+    "repository": "https://github.com/google-deepmind/mujoco_menagerie",
+    "commit": "da76818e269b82289eba39808e2fb91d679d6994",
+    "archive_url": "https://github.com/google-deepmind/mujoco_menagerie/archive/da76818e269b82289eba39808e2fb91d679d6994.tar.gz",
+    "archive_sha256": "b03591082fc46b4334d79785b6cc24864c6d6cda8be6947b87a0f4f5e731d7f5",
+    "archive_prefix": "mujoco_menagerie-da76818e269b82289eba39808e2fb91d679d6994/"
+  },
+  "license": {
+    "spdx": "BSD-3-Clause",
+    "path": "unitree_a1/LICENSE"
+  },
+  "model_path": "unitree_a1/scene.xml",
+  "model_sha256": "931a4e0caa84957dfebd865c63490725a7db3333e58bbfbc5c4d76d71af8c528",
+  "files": [
+    {
+      "path": "unitree_a1/LICENSE",
+      "sha256": "2b794acf1e250f5545ae5a47d81e5685ea5488ce077d1087ed8be5f81e9ba5c0",
+      "size": 1559
+    },
+    {
+      "path": "unitree_a1/a1.xml",
+      "sha256": "492978cb7700b0064bcefbc2b93dba651a828cf9212df91d56e951666890807c",
+      "size": 9740
+    },
+    {
+      "path": "unitree_a1/assets/calf.obj",
+      "sha256": "76e4c432d597a15e02d2afd31410b143f421a1d67bc86d7f3802dc6f391f0a1e",
+      "size": 5327177
+    },
+    {
+      "path": "unitree_a1/assets/hip.obj",
+      "sha256": "db1c7bf190915376e78f7d50ea2ab3b625d1b6edd02ec2ed0d02d7c1e195aabb",
+      "size": 1974009
+    },
+    {
+      "path": "unitree_a1/assets/thigh.obj",
+      "sha256": "9146a38aeb231b253f5fc132168ae6ce7485502bc6b6fad3d8af088724c620b9",
+      "size": 3245342
+    },
+    {
+      "path": "unitree_a1/assets/thigh_mirror.obj",
+      "sha256": "03cca79a14e307d00aa303d64dc364f4e62ca16138d58f9789f4e17be3dd2f58",
+      "size": 3354472
+    },
+    {
+      "path": "unitree_a1/assets/trunk.obj",
+      "sha256": "c29e82d0addb4c7e0f02b59057fccc53e9b6f2b149d4140cc2644712a39b8878",
+      "size": 5410512
+    },
+    {
+      "path": "unitree_a1/assets/trunk_A1.png",
+      "sha256": "512e8cfa5ebedfc4199afe172590d3d486461e42244ab5d439020111f9fc7e78",
+      "size": 71835
+    },
+    {
+      "path": "unitree_a1/scene.xml",
+      "sha256": "415eb95e2982c5a90c873f10d45e3efee94186ef6050e2c9aaea40135ff569ad",
+      "size": 813
+    }
+  ]
+}
