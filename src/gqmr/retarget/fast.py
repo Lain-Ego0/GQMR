@@ -204,14 +204,37 @@ def _build_targets(
             source_limb_vectors_world[frame]
         )
     source_neutral_limb_vectors = np.empty((len(LEG_ORDER), 3), dtype=np.float64)
+    neutral_range = motion.metadata.get("preprocess", {}).get(
+        "neutral_frame_range"
+    )
+    neutral_mask = np.ones(motion.frame_count, dtype=np.bool_)
+    if (
+        isinstance(neutral_range, list)
+        and len(neutral_range) == 2
+        and all(isinstance(value, int) for value in neutral_range)
+        and 0 <= neutral_range[0] <= neutral_range[1] < motion.frame_count
+    ):
+        neutral_mask[:] = False
+        neutral_mask[neutral_range[0] : neutral_range[1] + 1] = True
+        if np.count_nonzero(neutral_mask) < min(24, max(8, motion.frame_count // 20)):
+            neutral_mask[:] = True
     for index in range(len(LEG_ORDER)):
         samples_usable = (
             motion.frame_valid
             & root.valid
+            & neutral_mask
             & motion.valid_mask[:, toe_ids[index]]
             & motion.valid_mask[:, limb_root_ids[index]]
             & np.all(np.isfinite(source_limb_vectors_local[:, index]), axis=1)
         )
+        if not np.any(samples_usable):
+            samples_usable = (
+                motion.frame_valid
+                & root.valid
+                & motion.valid_mask[:, toe_ids[index]]
+                & motion.valid_mask[:, limb_root_ids[index]]
+                & np.all(np.isfinite(source_limb_vectors_local[:, index]), axis=1)
+            )
         if not np.any(samples_usable):
             raise FastRetargetError(
                 f"source leg {LEG_ORDER[index]} has no usable limb vectors"
@@ -219,6 +242,31 @@ def _build_targets(
         source_neutral_limb_vectors[index] = np.median(
             source_limb_vectors_local[samples_usable, index], axis=0
         )
+        all_usable = (
+            motion.frame_valid
+            & root.valid
+            & motion.valid_mask[:, toe_ids[index]]
+            & motion.valid_mask[:, limb_root_ids[index]]
+            & np.all(np.isfinite(source_limb_vectors_local[:, index]), axis=1)
+        )
+        global_neutral = np.median(
+            source_limb_vectors_local[all_usable, index], axis=0
+        )
+        global_radius = float(
+            np.percentile(
+                np.linalg.norm(
+                    source_limb_vectors_local[all_usable, index]
+                    - global_neutral,
+                    axis=1,
+                ),
+                75.0,
+            )
+        )
+        if (
+            np.linalg.norm(source_neutral_limb_vectors[index] - global_neutral)
+            > max(0.015, global_radius)
+        ):
+            source_neutral_limb_vectors[index] = global_neutral
 
     source_limb_delta = (
         source_limb_vectors_local - source_neutral_limb_vectors[None, :, :]

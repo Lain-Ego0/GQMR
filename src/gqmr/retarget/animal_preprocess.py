@@ -182,6 +182,7 @@ def estimate_contact_probability(
     *,
     height_threshold: float = 0.035,
     speed_threshold: float = 0.35,
+    ground=None,
 ) -> NDArray[np.float32]:
     """Estimate contact probability from toe height above ground and world speed."""
 
@@ -198,7 +199,12 @@ def estimate_contact_probability(
     ground_height = float(np.percentile(finite_heights, 5.0))
     velocity = np.gradient(toe_positions, motion.timestamps, axis=0, edge_order=2)
     speed = np.linalg.norm(velocity, axis=-1)
-    height = toe_positions[..., 2] - ground_height
+    if ground is None:
+        height = toe_positions[..., 2] - ground_height
+    else:
+        point = np.asarray(ground.point, dtype=np.float64)
+        normal = np.asarray(ground.normal, dtype=np.float64)
+        height = np.einsum("tli,i->tl", toe_positions - point, normal)
     height_score = 1.0 / (1.0 + np.exp((height - height_threshold) / 0.01))
     speed_score = 1.0 / (1.0 + np.exp((speed - speed_threshold) / 0.08))
     probability = height_score * speed_score

@@ -21,6 +21,14 @@ from gqmr.retarget.high_quality import (
     retarget_high_quality,
 )
 from gqmr.retarget.quality import replay_quality_report
+from gqmr.retarget.preprocess import (
+    AnimalPreprocessConfig,
+    AnimalPreprocessReport,
+    GroundEstimate,
+    estimate_ground_plane,
+    preprocess_animal_motion,
+    reestimate_contact_and_ground,
+)
 
 __all__ = [
     "BodyScaleEstimate",
@@ -40,4 +48,10 @@ __all__ = [
     "retarget_high_quality",
     "PDReplayConfig",
     "simulate_pd_tracking",
+    "AnimalPreprocessConfig",
+    "AnimalPreprocessReport",
+    "GroundEstimate",
+    "estimate_ground_plane",
+    "preprocess_animal_motion",
+    "reestimate_contact_and_ground",
 ]

@@ -50,8 +50,11 @@ from gqmr.project import (
 from gqmr.project.model import EditCommand
 from gqmr.pose import keypoint_batch_to_animal_motion
 from gqmr.retarget import (
+    AnimalPreprocessReport,
     diagnose_motion,
     evaluate_motion_suite,
+    preprocess_animal_motion,
+    reestimate_contact_and_ground,
     replay_quality_report,
     retarget_fast,
     retarget_high_quality,
@@ -81,6 +84,7 @@ class MainWindow(QMainWindow):
         self.robot_motion: RobotMotion | None = None
         self.diagnostics = None
         self.motion_diagnostics = None
+        self.preprocess_report: AnimalPreprocessReport | None = None
         self.repair_start_frame = 0
         self.animal_path: Path | None = None
         self.robot_path: Path | None = None
@@ -204,12 +208,14 @@ class MainWindow(QMainWindow):
         self.diagnose_button = QPushButton("分析问题帧")
         self.mark_repair_start_button = QPushButton("设为修复起点")
         self.repair_button = QPushButton("重算选中区间")
+        self.environment_button = QPushButton("重估选区接触/地面")
         self.export_button = QPushButton("导出…")
         export_layout.addRow("输出格式", self.format_combo)
         export_layout.addRow(self.quality_button)
         export_layout.addRow(self.diagnose_button)
         export_layout.addRow(self.mark_repair_start_button)
         export_layout.addRow(self.repair_button)
+        export_layout.addRow(self.environment_button)
         export_layout.addRow(self.export_button)
         controls_layout.addWidget(export_group)
         controls_layout.addStretch(1)
@@ -286,6 +292,7 @@ class MainWindow(QMainWindow):
         self.diagnose_button.clicked.connect(self.run_diagnostics)
         self.mark_repair_start_button.clicked.connect(self.mark_repair_start)
         self.repair_button.clicked.connect(self.repair_selected_range)
+        self.environment_button.clicked.connect(self.reestimate_selected_environment)
         self.export_button.clicked.connect(self.export_motion)
         self.play_button.clicked.connect(self.toggle_playback)
         self.frame_slider.valueChanged.connect(self.set_frame)
@@ -553,25 +560,36 @@ class MainWindow(QMainWindow):
         self.quality_button.setEnabled(self.robot_motion is not None and not busy)
         self.diagnose_button.setEnabled(self.robot_motion is not None and not busy)
         self.mark_repair_start_button.setEnabled(
-            self.robot_motion is not None and not busy
+            (self.robot_motion is not None or self.animal_motion is not None)
+            and not busy
         )
         self.repair_button.setEnabled(
             self.robot_motion is not None
             and self.animal_motion is not None
             and not busy
         )
+        self.environment_button.setEnabled(
+            self.animal_motion is not None and not busy
+        )
         self.export_button.setEnabled(self.robot_motion is not None and not busy)
         self.cancel_button.setEnabled(busy)
         self.batch_button.setEnabled(not busy)
 
-    def set_animal_motion(self, motion: AnimalMotion, path: Path | None = None) -> None:
+    def set_animal_motion(
+        self,
+        motion: AnimalMotion,
+        path: Path | None = None,
+        *,
+        preprocess_report: AnimalPreprocessReport | None = None,
+    ) -> None:
         self.animal_motion = motion
         self.animal_path = path
         self.robot_motion = None
         self.robot_path = None
         self.diagnostics = None
         self.motion_diagnostics = None
-        self.diagnostics_timeline.set_diagnostics(None)
+        self.preprocess_report = preprocess_report
+        self.diagnostics_timeline.set_diagnostics(self.preprocess_report)
         self.edit_stack = EditStack(motion)
         self.edit_target = "animal"
         source = motion.metadata.get("source", {})
@@ -637,7 +655,15 @@ class MainWindow(QMainWindow):
                 raise ValueError("支持 .npz、.json、.csv 和旧版 dog-27 .txt")
             if not isinstance(motion, AnimalMotion):
                 raise ValueError("选择的 NPZ 不是 AnimalMotion")
-            self.set_animal_motion(motion, path)
+            processed, report = preprocess_animal_motion(motion)
+            self.set_animal_motion(processed, path, preprocess_report=report)
+            self.diagnostics_timeline.set_diagnostics(report)
+            self._log(
+                {
+                    "imported": str(path),
+                    "preprocess": report.summary(),
+                }
+            )
         except Exception as error:
             QMessageBox.critical(self, "导入失败", str(error))
 
@@ -812,6 +838,37 @@ class MainWindow(QMainWindow):
 
         self._run_task(work, complete)
 
+    def reestimate_selected_environment(self) -> None:
+        if self.animal_motion is None:
+            return
+        start = min(self.repair_start_frame, self.frame_slider.value())
+        stop = max(self.repair_start_frame, self.frame_slider.value())
+        if stop <= start:
+            self.statusBar().showMessage(
+                "请先设置区间起点，再移动到终点", 4000
+            )
+            return
+        try:
+            motion, ground = reestimate_contact_and_ground(
+                self.animal_motion, (start, stop)
+            )
+            self.set_animal_motion(
+                motion,
+                self.animal_path,
+                preprocess_report=self.preprocess_report,
+            )
+            self.frame_slider.setValue(stop)
+            self._log(
+                {
+                    "reestimated_frame_range": [start, stop],
+                    "ground_point": ground.point.tolist(),
+                    "ground_normal": ground.normal.tolist(),
+                    "ground_rmse_m": ground.rmse,
+                }
+            )
+        except Exception as error:
+            QMessageBox.critical(self, "重估失败", str(error))
+
     def export_motion(self) -> None:
         if self.robot_motion is None:
             return
@@ -973,6 +1030,14 @@ class MainWindow(QMainWindow):
                 f"第 {frame + 1} 帧：{summary} | "
                 f"根位置修正 {float((position ** 2).sum() ** 0.5) * 1000.0:.1f} mm | "
                 f"根旋转修正 {float((rotation ** 2).sum() ** 0.5) * 57.2958:.1f}°"
+            )
+        elif self.preprocess_report is not None:
+            report = self.preprocess_report
+            neutral_start, neutral_stop = report.neutral_frame_range
+            neutral = " | 中性区间" if neutral_start <= frame <= neutral_stop else ""
+            self.diagnostics_label.setText(
+                f"第 {frame + 1} 帧：{report.frame_message(frame)}{neutral} | "
+                f"地面 RMSE {report.ground.rmse * 1000.0:.1f} mm"
             )
 
     def new_project(self) -> None:

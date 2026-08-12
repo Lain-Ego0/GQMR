@@ -28,6 +28,7 @@ def test_gui_window_and_preview_smoke() -> None:
     assert window.retarget_button.isEnabled()
     assert not window.diagnose_button.isEnabled()
     assert not window.repair_button.isEnabled()
+    assert window.environment_button.isEnabled()
     window.close()
 
 

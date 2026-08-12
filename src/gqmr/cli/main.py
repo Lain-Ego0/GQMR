@@ -46,6 +46,7 @@ from gqmr.retarget import (
     replay_quality_report,
     retarget_fast,
     retarget_high_quality,
+    preprocess_animal_motion,
     PDReplayConfig,
     simulate_pd_tracking,
 )
@@ -135,6 +136,9 @@ def build_parser() -> argparse.ArgumentParser:
     convert_parser.add_argument("--fps", type=float, default=60.0)
     convert_parser.add_argument("--start-frame", type=int, default=0)
     convert_parser.add_argument("--end-frame", type=int)
+    convert_parser.add_argument(
+        "--preprocess", action="store_true", help="run adaptive real-motion preprocessing"
+    )
     convert_parser.add_argument("--output", type=Path, required=True)
     synthetic_parser = subparsers.add_parser(
         "synthetic", help="generate an MIT-licensed canonical dog-27 motion"
@@ -294,6 +298,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--format", choices=("generic-json", "generic-npz", "generic-csv"), required=True
     )
     pose_convert.add_argument("--instance")
+    pose_convert.add_argument("--preprocess", action="store_true")
     pose_convert.add_argument("--output", type=Path, required=True)
     pose_triangulate = pose_commands.add_parser("triangulate", help="triangulate synchronized generic 2D views")
     pose_triangulate.add_argument("paths", type=Path, nargs="+")
@@ -421,6 +426,10 @@ def _run_convert(args: argparse.Namespace) -> dict[str, object]:
         end_frame=args.end_frame,
         skeleton=get_skeleton(args.skeleton),
     )
+    preprocess_summary = None
+    if args.preprocess:
+        motion, report = preprocess_animal_motion(motion)
+        preprocess_summary = report.summary()
     save_motion(args.output, motion)
     return {
         "input": str(args.path),
@@ -429,6 +438,7 @@ def _run_convert(args: argparse.Namespace) -> dict[str, object]:
         "frames": motion.frame_count,
         "duration_seconds": motion.duration,
         "skeleton_id": args.skeleton,
+        "preprocess": preprocess_summary,
     }
 
 
@@ -663,11 +673,16 @@ def _run_pose(args: argparse.Namespace) -> dict[str, object]:
     if args.pose_command == "convert":
         batch = _load_pose_file(args.path, args.format)
         motion = keypoint_batch_to_animal_motion(batch, instance_id=args.instance)
+        preprocess_summary = None
+        if args.preprocess:
+            motion, report = preprocess_animal_motion(motion)
+            preprocess_summary = report.summary()
         save_motion(args.output, motion)
         return {
             **_pose_summary(args.path, batch),
             "output": str(args.output),
             "schema_id": motion.schema_id,
+            "preprocess": preprocess_summary,
         }
     views = [load_generic_keypoints_json(path) for path in args.paths]
     try:

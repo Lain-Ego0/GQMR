@@ -12,6 +12,11 @@ from gqmr.retarget.animal_preprocess import (
     estimate_contact_probability,
     estimate_root_motion,
 )
+from gqmr.retarget.preprocess import (
+    estimate_ground_plane,
+    preprocess_animal_motion,
+    reestimate_contact_and_ground,
+)
 from gqmr.synthetic import (
     available_motion_presets,
     generate_dog27_motion,
@@ -176,3 +181,60 @@ def test_body_scale_rejects_missing_required_samples() -> None:
 
     with pytest.raises(ValueError, match="no valid samples"):
         estimate_body_scale(replace(motion, valid_mask=valid_mask))
+
+
+def test_adaptive_preprocess_detects_spikes_and_smooths_keypoints() -> None:
+    motion = generate_dog27_motion("walk", duration=1.0, fps=60.0)
+    positions = motion.positions.copy()
+    alternating = (np.arange(motion.frame_count) % 2 * 2 - 1)[:, None, None]
+    positions += alternating * np.array([0.004, 0.0, 0.002])
+    positions[25, 10] += np.array([0.35, 0.0, 0.2])
+    noisy = replace(
+        motion,
+        positions=positions,
+        contact_probability=np.full_like(motion.contact_probability, np.nan),
+    )
+
+    processed, report = preprocess_animal_motion(noisy)
+
+    assert report.bone_anomaly[25, 10] or report.velocity_anomaly[25, 10]
+    assert report.frame_abnormal[25]
+    assert np.all(np.isfinite(processed.positions))
+    assert np.all(np.isfinite(processed.contact_probability))
+    raw_acceleration = np.diff(noisy.positions[:, 3], n=2, axis=0)
+    filtered_acceleration = np.diff(processed.positions[:, 3], n=2, axis=0)
+    assert np.std(filtered_acceleration) < 0.4 * np.std(raw_acceleration)
+    assert processed.metadata["preprocess"]["mode"] == "adaptive_real_motion_v1"
+    start, stop = report.neutral_frame_range
+    assert 0 <= start <= stop < motion.frame_count
+
+
+def test_ground_plane_estimation_tracks_a_sloped_floor() -> None:
+    motion = generate_dog27_motion("walk", duration=1.0, fps=60.0)
+    positions = motion.positions.copy()
+    positions[..., 2] += 0.08 * positions[..., 0] - 0.04 * positions[..., 1]
+    sloped = replace(motion, positions=positions)
+
+    ground = estimate_ground_plane(sloped)
+    expected = np.array([-0.08, 0.04, 1.0])
+    expected /= np.linalg.norm(expected)
+
+    assert np.dot(ground.normal, expected) > 0.995
+    assert ground.candidate_count >= 6
+    assert ground.rmse < 0.01
+
+
+def test_local_contact_ground_reestimate_preserves_outside_interval() -> None:
+    motion = generate_dog27_motion("walk", duration=1.0, fps=30.0)
+    unknown = replace(
+        motion,
+        contact_probability=np.zeros_like(motion.contact_probability),
+    )
+
+    repaired, ground = reestimate_contact_and_ground(unknown, (8, 20))
+
+    assert np.array_equal(repaired.contact_probability[:8], unknown.contact_probability[:8])
+    assert np.array_equal(repaired.contact_probability[21:], unknown.contact_probability[21:])
+    assert np.any(repaired.contact_probability[8:21] > 0.0)
+    assert ground.normal[2] > 0.99
+    assert repaired.metadata["contact_source"] == "mixed"
