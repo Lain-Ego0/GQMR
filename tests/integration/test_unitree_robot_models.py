@@ -304,6 +304,23 @@ def test_go2_trot_is_height_stable_and_periodic() -> None:
     assert report["maximum_ground_penetration_m"] < 0.005
 
 
+def test_high_quality_root_optimization_is_bounded_and_collision_aware() -> None:
+    robot = load_robot_model("unitree-go2", cache_dir=_asset_cache())
+    animal = generate_dog27_motion(
+        "turn", duration=1.0, fps=60.0, speed=0.5, turn_rate=1.2
+    )
+    fast, _ = retarget_fast(animal, robot)
+    refined, _ = retarget_high_quality(animal, robot)
+    report = replay_quality_report(refined, robot)
+    correction = refined.root_position - fast.root_position
+
+    assert np.max(np.linalg.norm(correction[:, :2], axis=1)) <= 0.080001
+    assert np.max(np.abs(correction[:, 2])) <= 0.120001
+    assert report["joint_limit_violation_frames"] == 0
+    assert report["self_collision_frames"] == 0
+    assert report["maximum_ground_penetration_m"] < 0.01
+
+
 def test_synthetic_to_robot_cli_closed_loop(tmp_path: Path, capsys) -> None:
     cache = _asset_cache()
     animal_path = tmp_path / "pace.animal.npz"
@@ -342,7 +359,7 @@ def test_synthetic_to_robot_cli_closed_loop(tmp_path: Path, capsys) -> None:
     assert isinstance(loaded_robot_motion, RobotMotion)
     assert (
         loaded_robot_motion.metadata["retarget_config"]["mode"]
-        == "high_quality_contact_v2"
+        == "high_quality_root_contact_v3"
     )
     assert loaded_robot_motion.metadata["retarget_config"]["high_quality"][
         "residual_tolerance"
