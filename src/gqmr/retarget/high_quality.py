@@ -212,7 +212,7 @@ def retarget_high_quality(
     metadata = dict(fast_motion.metadata)
     retarget_config = dict(metadata["retarget_config"])
     retarget_config.update(
-        {"mode": "high_quality_contact_v1", "high_quality": asdict(config)}
+        {"mode": "high_quality_contact_v2", "high_quality": asdict(config)}
     )
     metadata["retarget_config"] = retarget_config
     result = replace(

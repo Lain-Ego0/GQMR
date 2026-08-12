@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import os
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
 import pytest
+from scipy.spatial.transform import Rotation
 
 from gqmr.assets import default_asset_root
 from gqmr.cli.main import main
@@ -237,6 +239,52 @@ def test_fast_retarget_meets_synthetic_acceptance(robot_id: str, gait: str) -> N
     ) < 0.09
 
 
+def test_fast_retarget_targets_do_not_depend_on_the_clip_start_phase() -> None:
+    robot = load_robot_model("unitree-go2", cache_dir=_asset_cache())
+    animal = generate_dog27_motion("trot", duration=1.0, fps=60.0)
+    shift = 17
+    shifted = replace(
+        animal,
+        positions=np.roll(animal.positions, -shift, axis=0),
+        confidence=np.roll(animal.confidence, -shift, axis=0),
+        valid_mask=np.roll(animal.valid_mask, -shift, axis=0),
+        contact_probability=np.roll(animal.contact_probability, -shift, axis=0),
+        frame_valid=np.roll(animal.frame_valid, -shift, axis=0),
+    )
+
+    original_motion, original_diagnostics = retarget_fast(animal, robot)
+    shifted_motion, shifted_diagnostics = retarget_fast(shifted, robot)
+    original_rotations = Rotation.from_quat(
+        np.roll(original_motion.root_rotation, -1, axis=1)
+    )
+    shifted_rotations = Rotation.from_quat(
+        np.roll(shifted_motion.root_rotation, -1, axis=1)
+    )
+    original_local_targets = np.stack(
+        [
+            original_rotations[frame].inv().apply(
+                original_diagnostics.target_foot_positions[frame]
+                - original_motion.root_position[frame]
+            )
+            for frame in range(animal.frame_count)
+        ]
+    )
+    shifted_local_targets = np.stack(
+        [
+            shifted_rotations[frame].inv().apply(
+                shifted_diagnostics.target_foot_positions[frame]
+                - shifted_motion.root_position[frame]
+            )
+            for frame in range(animal.frame_count)
+        ]
+    )
+
+    assert np.max(
+        np.abs(shifted_local_targets - np.roll(original_local_targets, -shift, axis=0))
+    ) < 1e-5
+    assert np.mean(shifted_motion.frame_valid) >= 0.995
+
+
 def test_go2_trot_is_height_stable_and_periodic() -> None:
     robot = load_robot_model("unitree-go2", cache_dir=_asset_cache())
     animal = generate_dog27_motion("trot", duration=2.0, fps=60.0)
@@ -294,7 +342,7 @@ def test_synthetic_to_robot_cli_closed_loop(tmp_path: Path, capsys) -> None:
     assert isinstance(loaded_robot_motion, RobotMotion)
     assert (
         loaded_robot_motion.metadata["retarget_config"]["mode"]
-        == "high_quality_contact_v1"
+        == "high_quality_contact_v2"
     )
     assert loaded_robot_motion.metadata["retarget_config"]["high_quality"][
         "residual_tolerance"

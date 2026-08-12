@@ -37,6 +37,7 @@ class FastRetargetConfig:
     unreachable_residual: float = 0.10
     root_translation_scale: float | None = None
     foot_motion_scale: float = 1.0
+    maximum_leg_reach_ratio: float = 0.98
 
     def __post_init__(self) -> None:
         numeric = (
@@ -45,6 +46,7 @@ class FastRetargetConfig:
             self.residual_tolerance,
             self.unreachable_residual,
             self.foot_motion_scale,
+            self.maximum_leg_reach_ratio,
         )
         if self.max_iterations <= 0 or not np.all(np.isfinite(numeric)):
             raise FastRetargetError("fast retarget configuration must be finite and positive")
@@ -61,6 +63,8 @@ class FastRetargetConfig:
             raise FastRetargetError(
                 "root_translation_scale must be finite and positive"
             )
+        if self.maximum_leg_reach_ratio > 1.0:
+            raise FastRetargetError("maximum_leg_reach_ratio must not exceed 1")
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,6 +129,10 @@ def _build_targets(
         [name_to_index[skeleton.limb_chains[leg][-1]] for leg in LEG_ORDER],
         dtype=np.int32,
     )
+    limb_root_ids = np.array(
+        [name_to_index[skeleton.limb_chains[leg][0]] for leg in LEG_ORDER],
+        dtype=np.int32,
+    )
 
     robot.set_pose(
         robot.config.default_root_position,
@@ -139,13 +147,35 @@ def _build_targets(
     default_feet_local = default_root_rotation.inv().apply(
         default_feet_world - default_root_position
     )
+    leg_joint_anchors_world = np.stack(
+        [
+            robot.data.xanchor[robot.joint_ids[index * 3 : (index + 1) * 3]]
+            for index in range(len(LEG_ORDER))
+        ]
+    )
+    default_leg_anchors_local = default_root_rotation.inv().apply(
+        leg_joint_anchors_world[:, 0] - default_root_position
+    )
+    maximum_leg_reaches = np.array(
+        [
+            np.sum(np.linalg.norm(np.diff(anchors, axis=0), axis=1))
+            + np.linalg.norm(default_feet_world[index] - anchors[-1])
+            for index, anchors in enumerate(leg_joint_anchors_world)
+        ],
+        dtype=np.float64,
+    )
 
     front_center = 0.5 * (default_feet_local[0] + default_feet_local[1])
     rear_center = 0.5 * (default_feet_local[2] + default_feet_local[3])
     robot_body_length = float(np.linalg.norm(front_center - rear_center))
     root_scale = config.root_translation_scale or robot_body_length / body_scale.torso_length
     leg_scales = {
-        leg: float(np.linalg.norm(default_feet_local[index]) / body_scale.leg_lengths[leg])
+        leg: float(
+            np.linalg.norm(
+                default_feet_local[index] - default_leg_anchors_local[index]
+            )
+            / body_scale.leg_lengths[leg]
+        )
         * config.foot_motion_scale
         for index, leg in enumerate(LEG_ORDER)
     }
@@ -163,21 +193,53 @@ def _build_targets(
         source_delta_initial * root_scale
     )
 
-    source_toes_world = motion.positions[:, toe_ids].astype(np.float64)
-    source_toes_local = np.empty_like(source_toes_world)
+    source_limb_vectors_world = (
+        motion.positions[:, toe_ids] - motion.positions[:, limb_root_ids]
+    ).astype(np.float64)
+    source_limb_vectors_local = np.empty_like(source_limb_vectors_world)
     for frame in range(motion.frame_count):
-        source_toes_local[frame] = source_heading[frame].inv().apply(
-            source_toes_world[frame] - root.position[frame]
+        source_limb_vectors_local[frame] = source_rotation[frame].inv().apply(
+            source_limb_vectors_world[frame]
         )
-    source_toe_delta = source_toes_local - source_toes_local[0]
-    target_feet = np.empty_like(source_toes_world)
+    source_neutral_limb_vectors = np.empty((len(LEG_ORDER), 3), dtype=np.float64)
+    for index in range(len(LEG_ORDER)):
+        samples_usable = (
+            motion.frame_valid
+            & root.valid
+            & motion.valid_mask[:, toe_ids[index]]
+            & motion.valid_mask[:, limb_root_ids[index]]
+            & np.all(np.isfinite(source_limb_vectors_local[:, index]), axis=1)
+        )
+        if not np.any(samples_usable):
+            raise FastRetargetError(
+                f"source leg {LEG_ORDER[index]} has no usable limb vectors"
+            )
+        source_neutral_limb_vectors[index] = np.median(
+            source_limb_vectors_local[samples_usable, index], axis=0
+        )
+
+    source_limb_delta = (
+        source_limb_vectors_local - source_neutral_limb_vectors[None, :, :]
+    )
+    target_feet = np.empty_like(source_limb_vectors_world)
     for frame in range(motion.frame_count):
         local_target = default_feet_local + np.stack(
             [
-                source_toe_delta[frame, index] * leg_scales[leg]
+                source_limb_delta[frame, index] * leg_scales[leg]
                 for index, leg in enumerate(LEG_ORDER)
             ]
         )
+        leg_vectors = local_target - default_leg_anchors_local
+        leg_vector_norms = np.linalg.norm(leg_vectors, axis=1)
+        allowed_reaches = maximum_leg_reaches * config.maximum_leg_reach_ratio
+        overextended = leg_vector_norms > allowed_reaches
+        if np.any(overextended):
+            leg_vectors[overextended] *= (
+                allowed_reaches[overextended] / leg_vector_norms[overextended]
+            )[:, None]
+            local_target[overextended] = (
+                default_leg_anchors_local[overextended] + leg_vectors[overextended]
+            )
         target_feet[frame] = robot_root_position[frame] + robot_rotation[frame].apply(
             local_target
         )
@@ -186,6 +248,7 @@ def _build_targets(
         motion.frame_valid
         & root.valid
         & np.all(motion.valid_mask[:, toe_ids], axis=1)
+        & np.all(motion.valid_mask[:, limb_root_ids], axis=1)
         & np.all(np.isfinite(target_feet), axis=(1, 2))
     )
     return (
@@ -315,7 +378,7 @@ def retarget_fast(
             "contact_order": ["FL", "FR", "RL", "RR"],
             "source_motion_sha256": motion_sha256(motion),
             "retarget_config": {
-                "mode": "fast_dls_v1",
+                "mode": "fast_semantic_limb_dls_v2",
                 **asdict(config),
                 "resolved_root_translation_scale": root_scale,
                 "resolved_leg_motion_scales": leg_scales,
