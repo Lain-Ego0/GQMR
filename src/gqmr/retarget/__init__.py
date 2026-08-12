@@ -21,6 +21,19 @@ from gqmr.retarget.high_quality import (
     retarget_high_quality,
 )
 from gqmr.retarget.quality import replay_quality_report
+from gqmr.retarget.local_repair import (
+    FootRepairMode,
+    FootRepairModes,
+    LocalRepairCommand,
+    LocalRepairConfig,
+    LocalRepairDiagnostics,
+    LocalRepairError,
+    LocalRepairResult,
+    LocalRepairSolver,
+    LocalRepairSolverOutput,
+    replay_local_repair,
+    run_local_repair,
+)
 from gqmr.retarget.preprocess import (
     AnimalPreprocessConfig,
     AnimalPreprocessReport,
@@ -54,4 +67,15 @@ __all__ = [
     "estimate_ground_plane",
     "preprocess_animal_motion",
     "reestimate_contact_and_ground",
+    "FootRepairMode",
+    "FootRepairModes",
+    "LocalRepairCommand",
+    "LocalRepairConfig",
+    "LocalRepairDiagnostics",
+    "LocalRepairError",
+    "LocalRepairResult",
+    "LocalRepairSolver",
+    "LocalRepairSolverOutput",
+    "replay_local_repair",
+    "run_local_repair",
 ]

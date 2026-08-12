@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import TypeAlias
+from typing import TYPE_CHECKING, TypeAlias
 
 import numpy as np
 from scipy.interpolate import CubicHermiteSpline
@@ -14,6 +14,9 @@ from gqmr.core.derivatives import angular_velocity_world, linear_velocity
 from gqmr.core.errors import GQMRError
 from gqmr.core.motion import AnimalMotion, RobotMotion
 from gqmr.project.model import EditCommand
+
+if TYPE_CHECKING:
+    from gqmr.retarget.local_repair import LocalRepairSolver
 
 Motion: TypeAlias = AnimalMotion | RobotMotion
 
@@ -219,7 +222,32 @@ def _resample(motion: Motion, command: EditCommand) -> Motion:
     )
 
 
-def apply_edit(motion: Motion, command: EditCommand) -> Motion:
+def apply_edit(
+    motion: Motion,
+    command: EditCommand,
+    *,
+    local_repair_solver: LocalRepairSolver | None = None,
+) -> Motion:
+    if command.kind == "local_repair":
+        if not isinstance(motion, RobotMotion):
+            raise EditingError("local repair requires RobotMotion")
+        if local_repair_solver is None:
+            raise EditingError("local repair replay requires a solver")
+        from gqmr.retarget.local_repair import (
+            LocalRepairCommand,
+            LocalRepairError,
+            replay_local_repair,
+        )
+
+        try:
+            result = replay_local_repair(
+                motion,
+                LocalRepairCommand.from_edit_command(command),
+                local_repair_solver,
+            )
+        except LocalRepairError as error:
+            raise EditingError(str(error)) from error
+        return result.motion
     operations = {
         "trim": _trim,
         "time_scale": _time_scale,
@@ -239,10 +267,18 @@ class EditStack:
     commands: list[EditCommand]
     cursor: int = 0
 
-    def __init__(self, base_motion: Motion) -> None:
+    local_repair_solver: LocalRepairSolver | None = None
+
+    def __init__(
+        self,
+        base_motion: Motion,
+        *,
+        local_repair_solver: LocalRepairSolver | None = None,
+    ) -> None:
         self.base_motion = base_motion
         self.commands = []
         self.cursor = 0
+        self.local_repair_solver = local_repair_solver
 
     def push(self, command: EditCommand) -> Motion:
         del self.commands[self.cursor :]
@@ -263,5 +299,9 @@ class EditStack:
     def current(self) -> Motion:
         motion = self.base_motion
         for command in self.commands[: self.cursor]:
-            motion = apply_edit(motion, command)
+            motion = apply_edit(
+                motion,
+                command,
+                local_repair_solver=self.local_repair_solver,
+            )
         return motion

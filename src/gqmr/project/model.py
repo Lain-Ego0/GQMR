@@ -88,7 +88,12 @@ class EditCommand(BaseModel):
 
     command_id: str
     kind: Literal[
-        "trim", "time_scale", "root_transform", "contact_override", "resample"
+        "trim",
+        "time_scale",
+        "root_transform",
+        "contact_override",
+        "resample",
+        "local_repair",
     ]
     resource_id: str
     parameters: dict[str, Any]
@@ -102,6 +107,14 @@ class EditCommand(BaseModel):
         except ValueError as error:
             raise ValueError("command/resource ID must be a UUID") from error
         return value
+
+    @model_validator(mode="after")
+    def validate_typed_parameters(self) -> "EditCommand":
+        if self.kind == "local_repair":
+            from gqmr.retarget.local_repair import LocalRepairCommandParameters
+
+            LocalRepairCommandParameters.model_validate(self.parameters)
+        return self
 
 
 class ProjectDocument(BaseModel):

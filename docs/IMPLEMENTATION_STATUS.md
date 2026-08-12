@@ -12,7 +12,9 @@
 - 真实动作导入已接入自适应预处理：关键点与 SO(3) 根姿态平滑、骨长/速度异常、地面平面、接触、动作类别和中性区间。
 - 高质量求解已支持根平移、根旋转小角度修正与关节联合优化，yaw 保留、roll/pitch 软投影、接触期稳定加权和周期旋转闭合。
 - GUI 已有问题帧时间轴、点击跳转、根修正/限位/穿地/碰撞/滑移诊断，以及区间重算和局部接触/地面重估。
-- 以上能力构成了局部修复的技术基础，但尚缺少根高度、幅度、平滑和指定足锁定的统一参数模型，也尚未建立修复前后质量门禁。
+- 局部修复 A1 数据与命令层已完成：`LocalRepairConfig` 统一根高度、三组幅度、平滑、四足 `auto/lock/unlock` 和接触/地面重估参数；`LocalRepairResult` 记录修复动作、区间、请求/实际参数、求解诊断和前后内容 hash。
+- `local_repair` 已进入工程编辑命令模型，支持严格 JSON/`.gqmr` 往返、撤销/重做和带输入/输出 hash 校验的决定性重放；求解器修改区间外数组会被拒绝。
+- 下一步为 A2 目标修正与 A3 区间求解；尚未实现参数对应的完整求解行为，也尚未建立修复前后质量门禁。
 
 当前开发顺序以 `IMPLEMENTATION_PLAN.md` 第 11～12 节为准：先完成局部修复引擎，再做诊断联动和质量门禁。新机器人和新导出格式已明确后置。
 
@@ -123,7 +125,7 @@ uv run --frozen pytest -q
 结果：
 
 ```text
-129 passed
+135 passed
 python -m compileall: passed
 wheel + sdist: passed
 clean temporary venv wheel install: passed

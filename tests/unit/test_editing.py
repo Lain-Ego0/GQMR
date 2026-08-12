@@ -5,9 +5,11 @@ from datetime import datetime, timezone
 
 import numpy as np
 import pytest
+from pydantic import ValidationError
 
 from gqmr.editing import (
     EditStack,
+    EditingError,
     apply_edit,
     concatenate_robot_motions,
     filter_robot_motion,
@@ -18,6 +20,14 @@ from gqmr.core.coordinates import quaternion_geodesic_distance
 from gqmr.core.io import motion_sha256
 from test_motion_io import make_robot_motion
 from gqmr.project.model import EditCommand
+from gqmr.retarget import (
+    LocalRepairCommand,
+    LocalRepairConfig,
+    LocalRepairDiagnostics,
+    LocalRepairError,
+    LocalRepairSolverOutput,
+    run_local_repair,
+)
 from gqmr.synthetic import generate_dog27_motion
 
 
@@ -142,3 +152,120 @@ def test_one_hundred_undo_redo_cycles_preserve_hash() -> None:
     for _ in range(100):
         stack.redo()
     assert motion_sha256(stack.current()) == edited_hash
+
+
+def _local_repair_solver(
+    motion, frame_range: tuple[int, int], config: LocalRepairConfig
+) -> LocalRepairSolverOutput:
+    start, stop = frame_range
+    root_position = motion.root_position.copy()
+    root_position[start : stop + 1, 2] += config.root_height_offset_m
+    repaired = replace(motion, root_position=root_position)
+    diagnostics = LocalRepairDiagnostics(
+        solver="fixed-test-solver",
+        solver_version="1.0",
+        frames_processed=stop - start + 1,
+        iterations=3,
+        converged=True,
+        residual_rmse_before_m=0.02,
+        residual_rmse_after_m=0.01,
+        status_counts={"ok": stop - start + 1},
+    )
+    return LocalRepairSolverOutput(
+        motion=repaired,
+        applied_config=config,
+        diagnostics=diagnostics,
+    )
+
+
+def test_local_repair_config_validation_and_json_round_trip() -> None:
+    config = LocalRepairConfig(
+        root_height_offset_m=0.04,
+        root_translation_scale=0.8,
+        root_tilt_scale=0.7,
+        limb_target_scale=0.9,
+        smoothing_strength=0.5,
+        foot_modes={"FL": "lock", "FR": "auto", "RL": "unlock", "RR": "auto"},
+        reestimate_contact=True,
+        reestimate_ground=True,
+    )
+
+    assert LocalRepairConfig.model_validate_json(config.model_dump_json()) == config
+    with pytest.raises(ValidationError, match="less than or equal to 0.25"):
+        LocalRepairConfig(root_height_offset_m=0.3)
+    assert LocalRepairConfig(foot_modes={"FL": "lock"}).foot_modes.FR == "auto"
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        LocalRepairConfig(foot_modes={"FL": "lock", "middle": "auto"})
+    with pytest.raises(ValidationError, match="finite number"):
+        LocalRepairConfig(smoothing_strength=float("nan"))
+
+
+def test_local_repair_result_command_round_trip_and_replay() -> None:
+    motion = make_robot_motion()
+    config = LocalRepairConfig(root_height_offset_m=0.02)
+    result = run_local_repair(motion, (0, 1), config, _local_repair_solver)
+    command = LocalRepairCommand.from_result(
+        result,
+        resource_id=str(uuid.uuid4()),
+        command_id=str(uuid.uuid4()),
+        created_at="2026-08-12T00:00:00Z",
+    )
+    edit_command = command.to_edit_command()
+    restored = LocalRepairCommand.from_edit_command(edit_command)
+    stack = EditStack(motion, local_repair_solver=_local_repair_solver)
+
+    edited = stack.push(edit_command)
+    assert restored == command
+    assert motion_sha256(edited) == result.output_motion_sha256
+    assert edited.metadata["local_repair_history"][-1]["applied_config"] == (
+        config.model_dump(mode="json")
+    )
+    for _ in range(100):
+        assert stack.undo() is motion
+        assert motion_sha256(stack.redo()) == result.output_motion_sha256
+
+
+def test_local_repair_rejects_outside_changes_and_nondeterministic_replay() -> None:
+    motion = make_robot_motion()
+    config = LocalRepairConfig(root_height_offset_m=0.02)
+
+    def leaking_solver(motion, frame_range, config):
+        output = _local_repair_solver(motion, frame_range, config)
+        root_position = output.motion.root_position.copy()
+        root_position[-1, 0] += 0.1
+        return replace(output, motion=replace(output.motion, root_position=root_position))
+
+    with pytest.raises(LocalRepairError, match="outside frame_range"):
+        run_local_repair(motion, (0, 0), config, leaking_solver)
+
+    result = run_local_repair(motion, (0, 1), config, _local_repair_solver)
+    command = LocalRepairCommand.from_result(
+        result, resource_id=str(uuid.uuid4())
+    ).to_edit_command()
+
+    def changed_solver(motion, frame_range, config):
+        output = _local_repair_solver(motion, frame_range, config)
+        root_position = output.motion.root_position.copy()
+        root_position[frame_range[0], 2] += 0.001
+        return replace(output, motion=replace(output.motion, root_position=root_position))
+
+    with pytest.raises(EditingError, match="different content hash"):
+        apply_edit(motion, command, local_repair_solver=changed_solver)
+
+
+def test_local_repair_solver_cannot_mutate_the_base_motion() -> None:
+    motion = make_robot_motion()
+    original = motion.root_position.copy()
+
+    def mutating_solver(motion, frame_range, config):
+        motion.root_position[:] = 42.0
+        return _local_repair_solver(motion, frame_range, config)
+
+    with pytest.raises(LocalRepairError, match="outside frame_range"):
+        run_local_repair(
+            motion,
+            (0, 0),
+            LocalRepairConfig(root_height_offset_m=0.01),
+            mutating_solver,
+        )
+    assert np.array_equal(motion.root_position, original)
