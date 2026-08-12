@@ -18,6 +18,7 @@ _ASSET_IDS = (
     "unitree-a2",
     "unitree-b2",
     "anybotics-anymal-c",
+    "deeprobotics-lite3",
 )
 _HEX = frozenset("0123456789abcdef")
 

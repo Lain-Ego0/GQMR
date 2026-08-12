@@ -11,7 +11,7 @@
 
 - `pyproject.toml` 和真实 `uv.lock` 已提交，锁定 33 个包。
 - 当前阶段不启用 CI/CD；仓库流水线配置已移除，冻结同步、compileall、pytest、构建和发布扫描由本地发布验收命令执行。
-- Unitree Go2/A2/B2 使用固定 `unitree_mujoco` 提交，Unitree A1/Go1 和 ANYmal C 使用固定 MuJoCo Menagerie 提交；完整 XML/mesh/LICENSE 已纳入仓库 `assets/` 并随 wheel 分发，同时保留归档/逐文件 hash、安全修复、状态复验和离线 pack/unpack。
+- Unitree Go2/A2/B2 使用固定 `unitree_mujoco` 提交，Unitree A1/Go1 和 ANYmal C 使用固定 MuJoCo Menagerie 提交，Lite3 使用固定 Deep Robotics 官方模型仓库提交；完整 XML/mesh/LICENSE 已纳入仓库 `assets/` 并随 wheel 分发，同时保留归档/逐文件 hash、安全修复、状态复验和离线 pack/unpack。
 - wheel 和 sdist 都排除 `motion_imitation` 与 CC BY-NC `*_joint_pos.txt`；每次本地重建发布物后同时扫描两种归档。
 - 已生成第三方许可证清单和 CycloneDX SBOM，GUI 包含 LGPL/Qt “关于”入口。
 
@@ -34,7 +34,7 @@
 
 ### 1.4 机器人泛化与 MuJoCo
 
-- 六种内置机器人的 Pydantic YAML 配置、根关节解析、业务 DOF 顺序、限位、body/局部足端和 contact geom 绑定已完成。
+- 七种内置机器人的 Pydantic YAML 配置、根关节解析、业务 DOF 顺序、限位、body/局部足端和 contact geom 绑定已完成。
 - FK、body pose、单足/四足 Jacobian、碰撞/地面穿透统计和 actuator 绑定都使用同一 `RobotModel`。
 - `robots suggest` 对任意 MJCF 生成只读候选 DOF/足端报告，ball/非 12 DOF/无唯一 free root 会说明拒绝原因。
 - 用户 MJCF 目录可计算确定性 hash，通过外部 YAML 无源码修改加载；拒绝 symlink、超量文件和 hash 不匹配。
@@ -62,7 +62,8 @@
 - ZIP64 项目加载拒绝路径穿越、重复/加密/意外成员、超量和异常压缩；嵌入资源会复验 size/hash。
 - 普通保存保留一份 `.bak`，portable pack 嵌入选中资源；嵌入工程可原位保存和再次打包，不会把物化缓存副本误登记为外部资源。
 - 物化缓存命中会同时复验 size 和 SHA-256；同尺寸篡改会从 portable 工程重新提取。
-- PySide6 GUI 实现导入/合成、六种内置机器人选择、快速/高质量后台任务、取消、质量日志、编辑/撤销/重做、工程和三种导出。
+- PySide6 GUI 实现 8 个固定动作测试预设、通用 3D keypoint 导入、七种内置机器人选择、快速/高质量后台任务、取消、质量日志、编辑/撤销/重做、工程和三种导出。
+- GUI 可运行当前机器人或全部机器人 × 全部动作的泛化评估，并输出有效帧率、残差、关节限位、自碰撞、穿地和接触足滑移等同口径指标；单项失败会记录而不会中断整批。
 - 预览区使用 MuJoCo 真实 mesh 渲染全部内置机器人，随时间轴更新根姿态和 12 DOF，支持拖动旋转与滚轮缩放；界面采用中性浅色桌面工具布局。
 - 已生成可展示截图 `docs/images/gqmr-gui.png`。
 

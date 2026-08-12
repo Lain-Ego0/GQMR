@@ -14,7 +14,7 @@ from gqmr.robots.config import (
 
 def test_builtin_robot_configs_are_valid_and_bound_to_assets() -> None:
     configs = [get_robot_config(robot_id) for robot_id in available_robot_configs()]
-    assert len(configs) == 6
+    assert len(configs) == 7
     assert all(config.id == config.asset_id for config in configs)
     assert all(len(config.dof_order) == 12 for config in configs)
     assert all(tuple(config.feet) == ("FL", "FR", "RL", "RR") for config in configs)
@@ -26,6 +26,9 @@ def test_builtin_robot_configs_are_valid_and_bound_to_assets() -> None:
     assert go2.feet["FL"].contact_geoms == ("FL",)
     assert b2.feet["FL"].body == "FL_calf"
     assert b2.feet["FL"].local_position == (0.0, 0.0, -0.35)
+    lite3 = get_robot_config("deeprobotics-lite3")
+    assert lite3.root_joint == "floating_base"
+    assert lite3.feet["FL"].contact_geoms == ("FL_FOOT_collision",)
 
 
 def test_duplicate_yaml_keys_are_rejected(tmp_path: Path) -> None:

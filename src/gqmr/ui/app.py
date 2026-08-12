@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QInputDialog,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSlider,
     QSplitter,
     QStatusBar,
@@ -47,10 +48,21 @@ from gqmr.project import (
     save_project,
 )
 from gqmr.project.model import EditCommand
-from gqmr.retarget import replay_quality_report, retarget_fast, retarget_high_quality
+from gqmr.pose import keypoint_batch_to_animal_motion
+from gqmr.retarget import (
+    evaluate_motion_suite,
+    replay_quality_report,
+    retarget_fast,
+    retarget_high_quality,
+)
 from gqmr.robots import available_robot_configs, load_robot_model
-from gqmr.sources.files import load_legacy_dog27
-from gqmr.synthetic import generate_dog27_motion
+from gqmr.sources.files import (
+    load_generic_keypoints_csv,
+    load_generic_keypoints_json,
+    load_generic_keypoints_npz,
+    load_legacy_dog27,
+)
+from gqmr.synthetic import available_motion_presets, generate_dog27_preset
 from gqmr.ui.preview import MotionPreview
 from gqmr.ui.worker import FunctionTask
 
@@ -117,8 +129,15 @@ class MainWindow(QMainWindow):
         source_group = QGroupBox("输入动作")
         source_layout = QVBoxLayout(source_group)
         source_layout.setSpacing(10)
+        self.motion_preset_combo = QComboBox()
+        for preset in available_motion_presets():
+            self.motion_preset_combo.addItem(preset.label, preset.id)
+        self.motion_preset_combo.setCurrentIndex(
+            self.motion_preset_combo.findData("trot_standard")
+        )
+        self.motion_preset_combo.setToolTip("固定参数、可重复生成，适合跨机器人对比")
         source_buttons = QHBoxLayout()
-        self.demo_button = QPushButton("使用示例")
+        self.demo_button = QPushButton("生成所选动作")
         self.import_button = QPushButton("导入动作…")
         source_buttons.addWidget(self.demo_button)
         source_buttons.addWidget(self.import_button)
@@ -126,6 +145,7 @@ class MainWindow(QMainWindow):
         self.source_label.setObjectName("sourceStatus")
         self.source_label.setWordWrap(True)
         self.source_label.setMinimumHeight(58)
+        source_layout.addWidget(self.motion_preset_combo)
         source_layout.addLayout(source_buttons)
         source_layout.addWidget(self.source_label)
         controls_layout.addWidget(source_group)
@@ -148,6 +168,11 @@ class MainWindow(QMainWindow):
         self.retarget_button.setObjectName("primaryButton")
         self.cancel_button = QPushButton("停止任务")
         self.cancel_button.setEnabled(False)
+        self.batch_scope_combo = QComboBox()
+        self.batch_scope_combo.addItem("当前机器人 × 全部动作", "current_robot")
+        self.batch_scope_combo.addItem("全部机器人 × 全部动作", "all_robots")
+        self.batch_button = QPushButton("批量评估泛化性能")
+        self.batch_button.setToolTip("逐项运行固定动作测试集，并输出统一质量指标")
         self.model_status = QLabel("模型尚未加载")
         self.model_status.setObjectName("modelStatus")
         self.model_status.setWordWrap(True)
@@ -157,6 +182,8 @@ class MainWindow(QMainWindow):
         retarget_layout.addRow("资产根目录", self.cache_edit)
         retarget_layout.addRow(self.model_status)
         retarget_layout.addRow(self.retarget_button)
+        retarget_layout.addRow("评估范围", self.batch_scope_combo)
+        retarget_layout.addRow(self.batch_button)
         retarget_layout.addRow(self.cancel_button)
         controls_layout.addWidget(retarget_group)
 
@@ -220,7 +247,14 @@ class MainWindow(QMainWindow):
         center_layout.addLayout(report_header)
         center_layout.addWidget(self.report)
 
-        splitter.addWidget(controls)
+        controls_scroll = QScrollArea()
+        controls_scroll.setObjectName("sidebarScroll")
+        controls_scroll.setFrameShape(QFrame.NoFrame)
+        controls_scroll.setWidgetResizable(True)
+        controls_scroll.setMinimumWidth(300)
+        controls_scroll.setMaximumWidth(340)
+        controls_scroll.setWidget(controls)
+        splitter.addWidget(controls_scroll)
         splitter.addWidget(center)
         splitter.setStretchFactor(1, 1)
         splitter.setSizes([320, 1120])
@@ -231,6 +265,7 @@ class MainWindow(QMainWindow):
         self.demo_button.clicked.connect(self.generate_demo)
         self.import_button.clicked.connect(self.import_motion)
         self.retarget_button.clicked.connect(self.start_retarget)
+        self.batch_button.clicked.connect(self.start_batch_evaluation)
         self.cancel_button.clicked.connect(self.cancel_task)
         self.quality_button.clicked.connect(self.run_quality)
         self.export_button.clicked.connect(self.export_motion)
@@ -281,7 +316,7 @@ class MainWindow(QMainWindow):
             "General Quadruped Motion Retargeting\n"
             "GQMR: MIT License\n"
             "PySide6 / Qt / shiboken6: LGPL-3.0 (dynamic libraries)\n"
-            "MuJoCo: Apache-2.0; Unitree / ANYmal assets: BSD-3-Clause\n\n"
+            "MuJoCo: Apache-2.0; Unitree / ANYmal / Deep Robotics assets: BSD-3-Clause\n\n"
             "完整第三方说明见 docs/THIRD_PARTY_LICENSES.md",
         )
 
@@ -320,6 +355,13 @@ class MainWindow(QMainWindow):
             QFrame#sidebar {
                 background: #ebe7df;
                 border-right: 1px solid #d8d3ca;
+            }
+            QScrollArea#sidebarScroll {
+                background: #ebe7df;
+                border: none;
+            }
+            QScrollArea#sidebarScroll > QWidget > QWidget {
+                background: #ebe7df;
             }
             QGroupBox {
                 background: #ffffff;
@@ -492,6 +534,7 @@ class MainWindow(QMainWindow):
         self.quality_button.setEnabled(self.robot_motion is not None and not busy)
         self.export_button.setEnabled(self.robot_motion is not None and not busy)
         self.cancel_button.setEnabled(busy)
+        self.batch_button.setEnabled(not busy)
 
     def set_animal_motion(self, motion: AnimalMotion, path: Path | None = None) -> None:
         self.animal_motion = motion
@@ -501,8 +544,9 @@ class MainWindow(QMainWindow):
         self.diagnostics = None
         self.edit_stack = EditStack(motion)
         self.edit_target = "animal"
-        source_name = path.name if path is not None else motion.metadata["source"].get(
-            "gait", "内存动作"
+        source = motion.metadata.get("source", {})
+        source_name = path.name if path is not None else source.get(
+            "preset_label", source.get("gait", "内存动作")
         )
         self.source_label.setText(
             f"{source_name}\n{motion.frame_count} 帧 · {motion.duration:.3f} 秒"
@@ -513,19 +557,54 @@ class MainWindow(QMainWindow):
         self._update_enabled()
 
     def generate_demo(self) -> None:
-        motion = generate_dog27_motion("trot", duration=2.0, fps=60.0)
+        preset_id = str(self.motion_preset_combo.currentData())
+        motion = generate_dog27_preset(preset_id)
         self.set_animal_motion(motion)
-        self._log({"generated": "MIT dog-27 trot", "frames": motion.frame_count})
+        source = motion.metadata["source"]
+        self._log(
+            {
+                "generated": source["preset_label"],
+                "preset_id": source["preset_id"],
+                "gait": source["gait"],
+                "speed_mps": source["speed_mps"],
+                "cycle_hz": source["cycle_hz"],
+                "turn_rate_rad_s": source["turn_rate_rad_s"],
+                "frames": motion.frame_count,
+                "license": source["license"],
+            }
+        )
 
     def import_motion(self) -> None:
         filename, _ = QFileDialog.getOpenFileName(
-            self, "导入动物运动", "", "Motion (*.npz *.txt);;All files (*)"
+            self,
+            "导入动物运动",
+            "",
+            "AnimalMotion / 3D keypoints (*.npz *.json *.csv *.txt);;All files (*)",
         )
         if not filename:
             return
         path = Path(filename)
         try:
-            motion = load_motion(path) if path.suffix.lower() == ".npz" else load_legacy_dog27(path)
+            suffix = path.suffix.lower()
+            if suffix == ".txt":
+                motion = load_legacy_dog27(path)
+            elif suffix == ".json":
+                motion = keypoint_batch_to_animal_motion(
+                    load_generic_keypoints_json(path)
+                )
+            elif suffix == ".csv":
+                motion = keypoint_batch_to_animal_motion(
+                    load_generic_keypoints_csv(path)
+                )
+            elif suffix == ".npz":
+                try:
+                    motion = load_motion(path)
+                except Exception:
+                    motion = keypoint_batch_to_animal_motion(
+                        load_generic_keypoints_npz(path)
+                    )
+            else:
+                raise ValueError("支持 .npz、.json、.csv 和旧版 dog-27 .txt")
             if not isinstance(motion, AnimalMotion):
                 raise ValueError("选择的 NPZ 不是 AnimalMotion")
             self.set_animal_motion(motion, path)
@@ -584,6 +663,23 @@ class MainWindow(QMainWindow):
             self._update_enabled()
 
         self._run_task(work, complete)
+
+    def start_batch_evaluation(self) -> None:
+        cache = self._cache_dir()
+        high_quality = self.retarget_mode.currentIndex() == 1
+        if self.batch_scope_combo.currentData() == "all_robots":
+            robot_ids = list(available_robot_configs())
+        else:
+            robot_ids = [self._selected_robot_id()]
+        self._run_task(
+            lambda token: evaluate_motion_suite(
+                robot_ids,
+                cache_dir=cache,
+                high_quality=high_quality,
+                cancelled=lambda: token.cancelled,
+            ),
+            self._log,
+        )
 
     def run_quality(self) -> None:
         if self.robot_motion is None:

@@ -1,0 +1,51 @@
+{
+  "schema_id": "gqmr.asset_manifest",
+  "schema_version": 1,
+  "asset_id": "deeprobotics-lite3",
+  "display_name": "Deep Robotics Lite3",
+  "source": {
+    "repository": "https://github.com/DeepRoboticsLab/deep_robotics_model",
+    "commit": "9f8b97ca57e79f2e82771cf934c4fc975ee2887c",
+    "archive_url": "https://github.com/DeepRoboticsLab/deep_robotics_model/archive/9f8b97ca57e79f2e82771cf934c4fc975ee2887c.tar.gz",
+    "archive_sha256": "d55dcadb229bbbe05b8136ad1c91e58c74e1537052d0d31a13be778129760d83",
+    "archive_prefix": "deep_robotics_model-9f8b97ca57e79f2e82771cf934c4fc975ee2887c/"
+  },
+  "license": {
+    "spdx": "BSD-3-Clause",
+    "path": "LICENSE.txt"
+  },
+  "model_path": "Lite3/mjcf/Lite3.xml",
+  "model_sha256": "6b1b95c719e9d584d8fb69e83e8c57079508a836f44e62c7abbd5ba7e08a8fcc",
+  "files": [
+    {
+      "path": "LICENSE.txt",
+      "sha256": "6bc5967b1cfbdb83b0798942a5f11d4e0555ad8de17697bd4d7eaab6e22f9be5",
+      "size": 1502
+    },
+    {
+      "path": "Lite3/mjcf/Lite3.xml",
+      "sha256": "512a93c353e111c4bf595eba429344599c4b0b617bb917c281d1e7cd648b2aed",
+      "size": 14445
+    },
+    {
+      "path": "Lite3/mjcf/meshes/hip.STL",
+      "sha256": "3386fa94992dbfc4d3e06c6d9fb110e2c4abd87f94c3ac766fdcce85c43341f3",
+      "size": 326084
+    },
+    {
+      "path": "Lite3/mjcf/meshes/shank.STL",
+      "sha256": "5410bae3b9b1e9fbc30343041450a80fc609806c2a83418bd2288b0720aec098",
+      "size": 1352184
+    },
+    {
+      "path": "Lite3/mjcf/meshes/thigh.STL",
+      "sha256": "f29ea97407a9a30cb4549206d080848350d8b455bf4b9a63441241cdacab1719",
+      "size": 499284
+    },
+    {
+      "path": "Lite3/mjcf/meshes/torso.STL",
+      "sha256": "6f3f5fc4b9985db56d741ac1b6b93e11d9fb283eb128f8800ad9603772bbcda2",
+      "size": 1318334
+    }
+  ]
+}

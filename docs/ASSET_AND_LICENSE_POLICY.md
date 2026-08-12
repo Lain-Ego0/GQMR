@@ -20,6 +20,13 @@ License:    BSD-3-Clause
 Models:     unitree_a1, unitree_go1, anybotics_anymal_c
 ```
 
+```text
+Repository: https://github.com/DeepRoboticsLab/deep_robotics_model
+Commit:     9f8b97ca57e79f2e82771cf934c4fc975ee2887c
+License:    BSD-3-Clause
+Models:     Lite3/mjcf
+```
+
 规则：
 
 - 不跟随 `main` 自动升级。
@@ -29,7 +36,7 @@ Models:     unitree_a1, unitree_go1, anybotics_anymal_c
 - 默认从仓库 `GQMR/assets` 加载；wheel 携带同一份内置资产，不依赖可被清理的系统缓存。
 - `gqmr assets status` 显示来源、提交、许可证、大小、hash 和验证状态。
 - `gqmr assets pack` 生成带 manifest 和许可证的离线包；`unpack` 重复校验。
-- 发布包和 UI 不得暗示 Unitree、ANYbotics、ETH 或 MuJoCo Menagerie 对 GQMR 的认可或背书。
+- 发布包和 UI 不得暗示 Unitree、ANYbotics、ETH、Deep Robotics 或 MuJoCo Menagerie 对 GQMR 的认可或背书。
 
 manifest、`model_sha256` 和离线包的当前机器可读定义见 [ASSET_MANIFEST_V1.md](ASSET_MANIFEST_V1.md)。
 
@@ -42,7 +49,7 @@ manifest、`model_sha256` 和离线包的当前机器可读定义见 [ASSET_MANI
 
 ## 2. 待补全机器人
 
-A1 已通过 MuJoCo Menagerie 正式纳入支持矩阵。Laikago、Vision60、云深处山猫和 Lite3 仍等待可分发的完整模型与明确许可证，v1 不伪造或宣称完整适配。
+A1 和 Lite3 已分别通过 MuJoCo Menagerie 与 Deep Robotics 官方模型仓库纳入支持矩阵。Laikago、Vision60 仍等待满足当前契约的模型。M20/M20S 等云深处轮足平台为 16 DOF，需扩展轮足运动 schema 和求解器后再纳入，v1 不会丢弃轮关节伪装成 12 DOF 纯足式机器人。
 
 重新加入支持矩阵的条件：
 

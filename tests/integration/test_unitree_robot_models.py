@@ -94,7 +94,10 @@ def test_all_builtin_robot_models_load_and_bind(robot_id: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "robot_id", ["unitree-go1", "unitree-a1", "unitree-a2", "anybotics-anymal-c"]
+    "robot_id", [
+        "unitree-go1", "unitree-a1", "unitree-a2", "anybotics-anymal-c",
+        "deeprobotics-lite3",
+    ]
 )
 def test_added_robot_models_retarget_synthetic_trot(robot_id: str) -> None:
     robot = load_robot_model(robot_id, cache_dir=_asset_cache())

@@ -110,11 +110,15 @@ def test_builtin_manifests_are_internally_consistent() -> None:
     assert set(specs) == {
         "unitree-go2", "unitree-go1", "unitree-a1", "unitree-a2",
         "unitree-b2", "anybotics-anymal-c",
+        "deeprobotics-lite3",
     }
     assert all(spec.files for spec in specs.values())
     assert all(spec.license_spdx == "BSD-3-Clause" for spec in specs.values())
     assert specs["unitree-go2"].archive_sha256 == specs["unitree-a2"].archive_sha256
     assert specs["unitree-a1"].archive_sha256 == specs["anybotics-anymal-c"].archive_sha256
+    assert specs["deeprobotics-lite3"].repository == (
+        "https://github.com/DeepRoboticsLab/deep_robotics_model"
+    )
 
 
 def test_repository_assets_are_the_verified_default() -> None:

@@ -10,7 +10,7 @@ from PySide6.QtWidgets import QApplication
 
 from gqmr.assets import default_asset_root
 from gqmr.core.io import load_motion
-from gqmr.synthetic import generate_dog27_motion
+from gqmr.synthetic import available_motion_presets, generate_dog27_motion
 from gqmr.ui.app import MainWindow
 
 
@@ -29,6 +29,27 @@ def test_gui_window_and_preview_smoke() -> None:
     window.close()
 
 
+def test_gui_exposes_repeatable_generalization_motion_suite() -> None:
+    application = QApplication.instance() or QApplication([])
+    window = MainWindow()
+
+    expected = [preset.id for preset in available_motion_presets()]
+    actual = [
+        window.motion_preset_combo.itemData(index)
+        for index in range(window.motion_preset_combo.count())
+    ]
+    assert actual == expected
+    right_index = window.motion_preset_combo.findData("turn_right")
+    window.motion_preset_combo.setCurrentIndex(right_index)
+    window.generate_demo()
+
+    assert window.animal_motion is not None
+    assert window.animal_motion.metadata["source"]["preset_id"] == "turn_right"
+    assert "右转" in window.source_label.text()
+    assert window.batch_scope_combo.findData("all_robots") >= 0
+    window.close()
+
+
 def test_gui_renders_go2_and_b2_models() -> None:
     asset_root = os.environ.get("GQMR_TEST_ASSET_ROOT") or os.environ.get(
         "GQMR_TEST_ASSET_CACHE"
@@ -42,6 +63,7 @@ def test_gui_renders_go2_and_b2_models() -> None:
     } == {
         "unitree-go2", "unitree-go1", "unitree-a1", "unitree-a2",
         "unitree-b2", "anybotics-anymal-c",
+        "deeprobotics-lite3",
     }
 
     go2_index = window.robot_combo.findData("unitree-go2")

@@ -12,7 +12,13 @@ from gqmr.retarget.animal_preprocess import (
     estimate_contact_probability,
     estimate_root_motion,
 )
-from gqmr.synthetic import generate_dog27_motion, generate_dog27_suite
+from gqmr.synthetic import (
+    available_motion_presets,
+    generate_dog27_motion,
+    generate_dog27_preset,
+    generate_dog27_preset_suite,
+    generate_dog27_suite,
+)
 from gqmr.skeletons import get_skeleton
 
 
@@ -28,7 +34,53 @@ def test_all_mit_synthetic_gaits_are_valid_and_deterministic() -> None:
         assert np.all((motion.contact_probability >= 0.0) & (motion.contact_probability <= 1.0))
         assert motion.metadata["source"]["license"] == "MIT"
         assert motion.metadata["source"]["gait"] == gait
-        assert motion.metadata["source"]["generator_version"] == 2
+        assert motion.metadata["source"]["generator_version"] == 3
+
+
+def test_motion_presets_are_deterministic_and_have_stable_metadata() -> None:
+    presets = available_motion_presets()
+    suite = generate_dog27_preset_suite(duration=0.5, fps=30.0)
+
+    assert [preset.id for preset in presets] == [
+        "walk_slow",
+        "walk_standard",
+        "trot_slow",
+        "trot_standard",
+        "trot_fast",
+        "pace_standard",
+        "turn_left",
+        "turn_right",
+    ]
+    assert set(suite) == {preset.id for preset in presets}
+    for preset in presets:
+        motion = suite[preset.id]
+        repeated = generate_dog27_preset(preset.id, duration=0.5, fps=30.0)
+        assert np.array_equal(motion.positions, repeated.positions)
+        assert motion.metadata["source"]["preset_id"] == preset.id
+        assert motion.metadata["source"]["preset_label"] == preset.label
+
+
+def test_speed_presets_and_turn_directions_are_distinct() -> None:
+    slow = generate_dog27_preset("trot_slow", duration=1.0, fps=30.0)
+    standard = generate_dog27_preset("trot_standard", duration=1.0, fps=30.0)
+    fast = generate_dog27_preset("trot_fast", duration=1.0, fps=30.0)
+    root_id = slow.keypoint_names.index("pelvis")
+    displacement = [
+        motion.positions[-1, root_id, 0] - motion.positions[0, root_id, 0]
+        for motion in (slow, standard, fast)
+    ]
+    assert displacement[0] < displacement[1] < displacement[2]
+
+    left = estimate_root_motion(
+        generate_dog27_preset("turn_left", duration=1.0, fps=30.0)
+    )
+    right = estimate_root_motion(
+        generate_dog27_preset("turn_right", duration=1.0, fps=30.0)
+    )
+    left_yaw = 2.0 * np.arctan2(left.rotation[-1, 3], left.rotation[-1, 0])
+    right_yaw = 2.0 * np.arctan2(right.rotation[-1, 3], right.rotation[-1, 0])
+    assert left_yaw == pytest.approx(0.65, abs=2e-3)
+    assert right_yaw == pytest.approx(-0.65, abs=2e-3)
 
 
 def test_synthetic_trot_has_physical_contact_and_fixed_bone_lengths() -> None:

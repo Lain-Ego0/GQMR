@@ -17,6 +17,11 @@ repository:     https://github.com/google-deepmind/mujoco_menagerie
 commit:         da76818e269b82289eba39808e2fb91d679d6994
 archive_sha256: b03591082fc46b4334d79785b6cc24864c6d6cda8be6947b87a0f4f5e731d7f5
 license:        BSD-3-Clause
+
+repository:     https://github.com/DeepRoboticsLab/deep_robotics_model
+commit:         9f8b97ca57e79f2e82771cf934c4fc975ee2887c
+archive_sha256: d55dcadb229bbbe05b8136ad1c91e58c74e1537052d0d31a13be778129760d83
+license:        BSD-3-Clause
 ```
 
 运行时不接受远端 manifest，不跟随 branch/tag，不使用下载后自动发现的文件替换内置清单。升级资产必须修改仓库中的 manifest 并经过人工审查。
@@ -71,6 +76,7 @@ ASCII(decimal_size) + LF
 | Unitree A2 | `bb95734d539a07c38e40bd3b3f96bf3d81b8d3fc746ed94508ea0639753f452b` |
 | Unitree B2 | `2ebeb90cb3cee67b4ae37e719244454b854719db126d9394ed89d3f0c9ec76e5` |
 | ANYmal C | `f5f157a9874cfdfc0b415dae90751a7270c872cf371a8e78a34f20138593fd7b` |
+| Deep Robotics Lite3 | `6b1b95c719e9d584d8fb69e83e8c57079508a836f44e62c7abbd5ba7e08a8fcc` |
 
 `RobotMotion.metadata_json.model_sha256`、模型绑定、回放和导出都使用此值。
 

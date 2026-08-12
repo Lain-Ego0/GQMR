@@ -14,6 +14,7 @@ from gqmr.retarget.fast import (
     retarget_fast,
 )
 from gqmr.retarget.quality import replay_quality_report
+from gqmr.retarget.benchmark import evaluate_motion_suite
 from gqmr.retarget.high_quality import (
     HighQualityRetargetConfig,
     retarget_high_quality,
@@ -31,6 +32,7 @@ __all__ = [
     "RetargetDiagnostics",
     "retarget_fast",
     "replay_quality_report",
+    "evaluate_motion_suite",
     "HighQualityRetargetConfig",
     "retarget_high_quality",
     "PDReplayConfig",

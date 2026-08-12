@@ -1,0 +1,28 @@
+schema_version: 1
+id: deeprobotics-lite3
+asset_id: deeprobotics-lite3
+model: Lite3/mjcf/Lite3.xml
+model_sha256: 6b1b95c719e9d584d8fb69e83e8c57079508a836f44e62c7abbd5ba7e08a8fcc
+root_joint: floating_base
+base_body: TORSO
+dof_order:
+  - FL_HipX_joint
+  - FL_HipY_joint
+  - FL_Knee_joint
+  - FR_HipX_joint
+  - FR_HipY_joint
+  - FR_Knee_joint
+  - HL_HipX_joint
+  - HL_HipY_joint
+  - HL_Knee_joint
+  - HR_HipX_joint
+  - HR_HipY_joint
+  - HR_Knee_joint
+feet:
+  FL: {body: FL_FOOT, local_position: [0.0, 0.0, 0.0], contact_geoms: [FL_FOOT_collision]}
+  FR: {body: FR_FOOT, local_position: [0.0, 0.0, 0.0], contact_geoms: [FR_FOOT_collision]}
+  RL: {body: HL_FOOT, local_position: [0.0, 0.0, 0.0], contact_geoms: [HL_FOOT_collision]}
+  RR: {body: HR_FOOT, local_position: [0.0, 0.0, 0.0], contact_geoms: [HR_FOOT_collision]}
+default_root_position: [0.0, 0.0, 0.286]
+default_root_rotation: [1.0, 0.0, 0.0, 0.0]
+default_dof_position: [0.0, -0.8, 1.6, 0.0, -0.8, 1.6, 0.0, -0.8, 1.6, 0.0, -0.8, 1.6]
