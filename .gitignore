@@ -8,3 +8,7 @@ __pycache__/
 build/
 dist/
 *.tmp
+
+# User-local third-party motion datasets. Sources may be large, non-commercial,
+# application-gated, or non-redistributable; only manifests/docs are committed.
+external_data/

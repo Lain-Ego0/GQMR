@@ -58,6 +58,10 @@ PYTHONPATH=src python3 -m gqmr validate motion.robot.npz --robot unitree-go2
 [实施状态](docs/IMPLEMENTATION_STATUS.md)记录的冻结环境、本地构建、包扫描和干净环境演示步骤验收。
 本轮可展示流程和量化结果见 [展示与验收说明](docs/DEMO_ACCEPTANCE.md)。
 
+真实动物第三方动作不进入 Git。运行 `./tools/install_external_motion_data.sh` 可把本地已有的
+AI4Animation 犬类动捕整理到被忽略的 `external_data/`，PFERD、RGBD-Dog 和 AcinoSet
+的官方链接、许可限制与目录约定见 [本地第三方动作数据](docs/EXTERNAL_MOTION_DATASETS.md)。
+
 Unitree 资产命令：
 
 ```bash
