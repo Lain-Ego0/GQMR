@@ -50,11 +50,13 @@ from gqmr.project import (
 from gqmr.project.model import EditCommand
 from gqmr.pose import keypoint_batch_to_animal_motion
 from gqmr.retarget import (
+    diagnose_motion,
     evaluate_motion_suite,
     replay_quality_report,
     retarget_fast,
     retarget_high_quality,
 )
+from gqmr.ui.diagnostics import DiagnosticsTimeline
 from gqmr.robots import available_robot_configs, load_robot_model
 from gqmr.sources.files import (
     load_generic_keypoints_csv,
@@ -78,6 +80,8 @@ class MainWindow(QMainWindow):
         self.animal_motion: AnimalMotion | None = None
         self.robot_motion: RobotMotion | None = None
         self.diagnostics = None
+        self.motion_diagnostics = None
+        self.repair_start_frame = 0
         self.animal_path: Path | None = None
         self.robot_path: Path | None = None
         self.project = new_project()
@@ -197,9 +201,15 @@ class MainWindow(QMainWindow):
         self.format_combo.addItem("GQMR 标准 NPZ", "canonical")
         self.format_combo.addItem("DeepMimic JSON", "deepmimic")
         self.quality_button = QPushButton("生成质量报告")
+        self.diagnose_button = QPushButton("分析问题帧")
+        self.mark_repair_start_button = QPushButton("设为修复起点")
+        self.repair_button = QPushButton("重算选中区间")
         self.export_button = QPushButton("导出…")
         export_layout.addRow("输出格式", self.format_combo)
         export_layout.addRow(self.quality_button)
+        export_layout.addRow(self.diagnose_button)
+        export_layout.addRow(self.mark_repair_start_button)
+        export_layout.addRow(self.repair_button)
         export_layout.addRow(self.export_button)
         controls_layout.addWidget(export_group)
         controls_layout.addStretch(1)
@@ -231,6 +241,9 @@ class MainWindow(QMainWindow):
         playback.addWidget(self.play_button)
         playback.addWidget(self.frame_slider, 1)
         playback.addWidget(self.frame_label)
+        self.diagnostics_timeline = DiagnosticsTimeline()
+        self.diagnostics_label = QLabel("尚未运行问题帧分析")
+        self.diagnostics_label.setWordWrap(True)
         report_header = QHBoxLayout()
         report_title = QLabel("运行记录")
         report_title.setObjectName("sectionTitle")
@@ -244,6 +257,8 @@ class MainWindow(QMainWindow):
         center_layout.addLayout(preview_header)
         center_layout.addWidget(self.preview, 1)
         center_layout.addWidget(playback_panel)
+        center_layout.addWidget(self.diagnostics_timeline)
+        center_layout.addWidget(self.diagnostics_label)
         center_layout.addLayout(report_header)
         center_layout.addWidget(self.report)
 
@@ -268,9 +283,13 @@ class MainWindow(QMainWindow):
         self.batch_button.clicked.connect(self.start_batch_evaluation)
         self.cancel_button.clicked.connect(self.cancel_task)
         self.quality_button.clicked.connect(self.run_quality)
+        self.diagnose_button.clicked.connect(self.run_diagnostics)
+        self.mark_repair_start_button.clicked.connect(self.mark_repair_start)
+        self.repair_button.clicked.connect(self.repair_selected_range)
         self.export_button.clicked.connect(self.export_motion)
         self.play_button.clicked.connect(self.toggle_playback)
         self.frame_slider.valueChanged.connect(self.set_frame)
+        self.diagnostics_timeline.frameClicked.connect(self.frame_slider.setValue)
         self.robot_combo.currentIndexChanged.connect(
             lambda _: self.refresh_robot_preview()
         )
@@ -532,6 +551,15 @@ class MainWindow(QMainWindow):
         busy = self.active_task is not None
         self.retarget_button.setEnabled(self.animal_motion is not None and not busy)
         self.quality_button.setEnabled(self.robot_motion is not None and not busy)
+        self.diagnose_button.setEnabled(self.robot_motion is not None and not busy)
+        self.mark_repair_start_button.setEnabled(
+            self.robot_motion is not None and not busy
+        )
+        self.repair_button.setEnabled(
+            self.robot_motion is not None
+            and self.animal_motion is not None
+            and not busy
+        )
         self.export_button.setEnabled(self.robot_motion is not None and not busy)
         self.cancel_button.setEnabled(busy)
         self.batch_button.setEnabled(not busy)
@@ -542,6 +570,8 @@ class MainWindow(QMainWindow):
         self.robot_motion = None
         self.robot_path = None
         self.diagnostics = None
+        self.motion_diagnostics = None
+        self.diagnostics_timeline.set_diagnostics(None)
         self.edit_stack = EditStack(motion)
         self.edit_target = "animal"
         source = motion.metadata.get("source", {})
@@ -654,6 +684,8 @@ class MainWindow(QMainWindow):
             robot, motion, diagnostics = result
             self.robot_motion = motion
             self.diagnostics = diagnostics
+            self.motion_diagnostics = None
+            self.diagnostics_timeline.set_diagnostics(None)
             self.edit_stack = EditStack(motion)
             self.edit_target = "robot"
             self.preview.set_robot_model(robot)
@@ -694,6 +726,92 @@ class MainWindow(QMainWindow):
             self._log,
         )
 
+    def run_diagnostics(self) -> None:
+        if self.robot_motion is None:
+            return
+        motion = self.robot_motion
+        retarget_diagnostics = self.diagnostics
+        robot_id = self._selected_robot_id()
+        cache = self._cache_dir()
+
+        def complete(diagnostics) -> None:
+            self.motion_diagnostics = diagnostics
+            self.diagnostics_timeline.set_diagnostics(diagnostics)
+            problems = diagnostics.problem_frames
+            self._log(
+                {
+                    "problem_frames": problems.tolist(),
+                    "problem_frame_count": int(len(problems)),
+                    "invalid_frames": int(diagnostics.invalid.sum()),
+                    "unreachable_frames": int(diagnostics.unreachable.sum()),
+                    "self_collision_frames": int(diagnostics.self_collision.sum()),
+                }
+            )
+            self.set_frame(self.frame_slider.value())
+
+        self._run_task(
+            lambda token: diagnose_motion(
+                motion,
+                load_robot_model(robot_id, cache_dir=cache),
+                retarget_diagnostics,
+            ),
+            complete,
+        )
+
+    def mark_repair_start(self) -> None:
+        self.repair_start_frame = self.frame_slider.value()
+        self.statusBar().showMessage(
+            f"局部修复起点：第 {self.repair_start_frame + 1} 帧", 3000
+        )
+
+    def repair_selected_range(self) -> None:
+        if self.animal_motion is None or self.robot_motion is None:
+            return
+        start = min(self.repair_start_frame, self.frame_slider.value())
+        stop = max(self.repair_start_frame, self.frame_slider.value())
+        if stop <= start:
+            self.statusBar().showMessage(
+                "请先设置修复起点，再移动到区间终点", 4000
+            )
+            return
+        animal = self.animal_motion
+        initial = self.robot_motion
+        robot_id = self._selected_robot_id()
+        cache = self._cache_dir()
+
+        def work(token):
+            robot = load_robot_model(robot_id, cache_dir=cache)
+            motion, diagnostics = retarget_high_quality(
+                animal,
+                robot,
+                frame_range=(start, stop),
+                initial_motion=initial,
+            )
+            return robot, motion, diagnostics
+
+        def complete(result) -> None:
+            robot, motion, diagnostics = result
+            self.robot_motion = motion
+            self.diagnostics = diagnostics
+            self.motion_diagnostics = None
+            self.diagnostics_timeline.set_diagnostics(None)
+            self.edit_stack = EditStack(motion)
+            self.preview.set_robot_model(robot)
+            self.preview.set_motion(self.animal_motion, motion, diagnostics)
+            self.frame_slider.setValue(stop)
+            self._log(
+                {
+                    "local_repair": [start, stop],
+                    "solver_residual_rmse_m": float(
+                        (motion.solver_residual[start : stop + 1] ** 2).mean()
+                        ** 0.5
+                    ),
+                }
+            )
+            self._update_enabled()
+
+        self._run_task(work, complete)
+
     def export_motion(self) -> None:
         if self.robot_motion is None:
             return
@@ -729,6 +847,9 @@ class MainWindow(QMainWindow):
         )
 
     def _show_edited_motion(self, motion) -> None:
+        self.motion_diagnostics = None
+        self.diagnostics_timeline.set_diagnostics(None)
+        self.diagnostics_label.setText("尚未运行问题帧分析")
         if isinstance(motion, AnimalMotion):
             self.animal_motion = motion
             self.robot_motion = None
@@ -841,7 +962,18 @@ class MainWindow(QMainWindow):
 
     def set_frame(self, frame: int) -> None:
         self.preview.set_frame(frame)
+        self.diagnostics_timeline.set_frame(frame)
         self.frame_label.setText(f"{frame + 1} / {self.frame_slider.maximum() + 1}")
+        if self.motion_diagnostics is not None:
+            messages = self.motion_diagnostics.frame_messages(frame)
+            position = self.motion_diagnostics.root_position_correction[frame]
+            rotation = self.motion_diagnostics.root_rotation_correction[frame]
+            summary = "、".join(messages) if messages else "未发现明显问题"
+            self.diagnostics_label.setText(
+                f"第 {frame + 1} 帧：{summary} | "
+                f"根位置修正 {float((position ** 2).sum() ** 0.5) * 1000.0:.1f} mm | "
+                f"根旋转修正 {float((rotation ** 2).sum() ** 0.5) * 57.2958:.1f}°"
+            )
 
     def new_project(self) -> None:
         self.project = new_project()
@@ -877,6 +1009,9 @@ class MainWindow(QMainWindow):
                         self.robot_combo.setCurrentIndex(robot_index)
                     self.robot_motion = motion
                     self.robot_path = resource_path
+                    self.diagnostics = None
+                    self.motion_diagnostics = None
+                    self.diagnostics_timeline.set_diagnostics(None)
                     self.edit_stack = EditStack(motion)
                     self.edit_target = "robot"
                     self.preview.set_motion(self.animal_motion, motion)

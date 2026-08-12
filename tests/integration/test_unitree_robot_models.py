@@ -17,6 +17,8 @@ from gqmr.core.motion import RobotMotion, SolverStatus
 from gqmr.exporters import load_isaaclab_amp_v232
 from gqmr.exporters.isaaclab_amp import export_isaaclab_amp_v232
 from gqmr.retarget import (
+    HighQualityRetargetConfig,
+    diagnose_motion,
     replay_quality_report,
     retarget_fast,
     retarget_high_quality,
@@ -319,6 +321,44 @@ def test_high_quality_root_optimization_is_bounded_and_collision_aware() -> None
     assert report["joint_limit_violation_frames"] == 0
     assert report["self_collision_frames"] == 0
     assert report["maximum_ground_penetration_m"] < 0.01
+
+
+def test_high_quality_root_rotation_is_bounded_and_exposed_in_diagnostics() -> None:
+    robot = load_robot_model("unitree-go2", cache_dir=_asset_cache())
+    animal = generate_dog27_motion(
+        "turn", duration=0.4, fps=30.0, speed=0.5, turn_rate=1.2
+    )
+    motion, retarget_diagnostics = retarget_high_quality(animal, robot)
+    diagnostics = diagnose_motion(motion, robot, retarget_diagnostics)
+    correction = retarget_diagnostics.root_rotation_correction
+
+    assert correction is not None
+    assert np.max(np.linalg.norm(correction[:, :2], axis=1)) <= np.deg2rad(28.01)
+    assert np.max(np.abs(correction[:, 2])) <= np.deg2rad(5.01)
+    assert diagnostics.root_rotation_correction.shape == (motion.frame_count, 3)
+    assert diagnostics.joint_limit_proximity.shape == motion.dof_position.shape
+
+
+def test_local_high_quality_repair_preserves_frames_outside_interval() -> None:
+    robot = load_robot_model("unitree-go2", cache_dir=_asset_cache())
+    animal = generate_dog27_motion("walk", duration=0.5, fps=30.0)
+    initial, _ = retarget_high_quality(
+        animal,
+        robot,
+        config=HighQualityRetargetConfig(optimize_root_rotation=False),
+    )
+    repaired, _ = retarget_high_quality(
+        animal,
+        robot,
+        frame_range=(4, 10),
+        initial_motion=initial,
+    )
+
+    outside = np.r_[0:4, 11 : initial.frame_count]
+    assert np.array_equal(repaired.root_position[outside], initial.root_position[outside])
+    assert np.array_equal(repaired.root_rotation[outside], initial.root_rotation[outside])
+    assert np.array_equal(repaired.dof_position[outside], initial.dof_position[outside])
+    assert repaired.metadata["retarget_config"]["refined_frame_range"] == [4, 10]
 
 
 def test_synthetic_to_robot_cli_closed_loop(tmp_path: Path, capsys) -> None:

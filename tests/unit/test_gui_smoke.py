@@ -26,6 +26,8 @@ def test_gui_window_and_preview_smoke() -> None:
     assert window.windowTitle().startswith("GQMR")
     assert window.frame_slider.maximum() == motion.frame_count - 1
     assert window.retarget_button.isEnabled()
+    assert not window.diagnose_button.isEnabled()
+    assert not window.repair_button.isEnabled()
     window.close()
 
 

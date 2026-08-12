@@ -74,6 +74,8 @@ class RetargetDiagnostics:
     iterations: NDArray[np.int16]
     root_translation_scale: float
     leg_motion_scales: dict[str, float]
+    root_position_correction: NDArray[np.float32] | None = None
+    root_rotation_correction: NDArray[np.float32] | None = None
 
 
 def _differentiate_linear(timestamps: np.ndarray, values: np.ndarray) -> np.ndarray:
@@ -392,5 +394,7 @@ def retarget_fast(
         iterations=iterations,
         root_translation_scale=root_scale,
         leg_motion_scales=leg_scales,
+        root_position_correction=np.zeros((frames, 3), dtype=np.float32),
+        root_rotation_correction=np.zeros((frames, 3), dtype=np.float32),
     )
     return result, diagnostics
