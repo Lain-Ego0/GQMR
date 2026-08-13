@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from gqmr.exporters.api import discover_exporters
 from gqmr.jobs import ProcessJob
+from gqmr.jobs.process import ProcessJobError
 from gqmr.pose import (
     KeypointBatch,
     VideoFrameBatch,
@@ -100,6 +103,7 @@ def run_pose_video_backend_plugin(
     end_seconds: float | None = None,
     max_frames: int | None = None,
     timeout: float | None = None,
+    cancelled: Callable[[], bool] | None = None,
 ) -> KeypointBatch:
     with ProcessJob(
         "gqmr.plugins.runner:_pose_video_child",
@@ -113,7 +117,25 @@ def run_pose_video_backend_plugin(
             max_frames,
         ),
     ) as job:
-        return job.result(timeout=timeout)
+        deadline = None if timeout is None else time.monotonic() + timeout
+        while True:
+            if cancelled is not None and cancelled():
+                raise ProcessJobError("pose video job was cancelled")
+            wait_seconds = 0.2
+            if deadline is not None:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0.0:
+                    raise ProcessJobError("pose video job timed out")
+                wait_seconds = min(wait_seconds, remaining)
+            try:
+                return job.result(timeout=wait_seconds)
+            except ProcessJobError as error:
+                if str(error) != "job result timed out":
+                    raise
+                if not job.running:
+                    raise ProcessJobError(
+                        "pose video job exited without returning a result"
+                    ) from error
 
 
 def run_exporter_plugin(

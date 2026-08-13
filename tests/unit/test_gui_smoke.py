@@ -10,7 +10,9 @@ from PySide6.QtWidgets import QApplication
 
 from gqmr.assets import default_asset_root
 from gqmr.core.io import load_motion
+from gqmr.pose.api import PoseBackendInfo
 from gqmr.synthetic import available_motion_presets, generate_dog27_motion
+from gqmr.ui import app as app_module
 from gqmr.ui.app import MainWindow
 
 
@@ -50,6 +52,40 @@ def test_gui_exposes_repeatable_generalization_motion_suite() -> None:
     assert window.animal_motion.metadata["source"]["preset_id"] == "turn_right"
     assert "右转" in window.source_label.text()
     assert window.batch_scope_combo.findData("all_robots") >= 0
+    window.close()
+
+
+def test_gui_exposes_installed_dog_video_pose_backend(monkeypatch) -> None:
+    class FixtureBackend:
+        def describe(self) -> PoseBackendInfo:
+            return PoseBackendInfo(
+                api_version=1,
+                name="MMPose dog 2D",
+                package="fixture",
+                package_version="1",
+                skeleton_ids=("ap10k",),
+                dimensions=(2,),
+                multi_instance=False,
+                batch_range=(1, 64),
+                devices=("cuda",),
+                output_coordinate_frame="image_pixels_x_right_y_down",
+            )
+
+    monkeypatch.setattr(
+        app_module, "discover_pose_backends", lambda: {"dog-mmpose": FixtureBackend}
+    )
+    application = QApplication.instance() or QApplication([])
+    window = MainWindow()
+
+    backend_index = window.pose_backend_combo.findData("dog-mmpose")
+    assert backend_index >= 0
+    assert window.pose_config_edit.text().endswith("dog-mmpose.cuda.json")
+    assert not window.video_extract_button.isEnabled()
+
+    window.video_pose_path = Path("fixture-dog.mp4")
+    window._update_enabled()
+    assert window.video_extract_button.isEnabled()
+    assert "2D" in window.video_extract_button.text()
     window.close()
 
 

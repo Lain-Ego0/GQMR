@@ -36,6 +36,7 @@ from PySide6.QtWidgets import (
 from gqmr import __version__
 from gqmr.assets import default_asset_root, get_asset_spec
 from gqmr.core.io import load_motion, save_motion
+from gqmr.core.json import StrictJSONError, loads_strict_json
 from gqmr.core.motion import AnimalMotion, RobotMotion
 from gqmr.editing import EditStack, filter_robot_motion, make_robot_loop
 from gqmr.exporters import export_deepmimic_json, export_isaaclab_amp_v232
@@ -48,7 +49,8 @@ from gqmr.project import (
     save_project,
 )
 from gqmr.project.model import EditCommand
-from gqmr.pose import keypoint_batch_to_animal_motion
+from gqmr.plugins import run_pose_video_backend_plugin
+from gqmr.pose import discover_pose_backends, keypoint_batch_to_animal_motion
 from gqmr.retarget import (
     AnimalPreprocessReport,
     diagnose_motion,
@@ -66,9 +68,11 @@ from gqmr.sources.files import (
     load_generic_keypoints_json,
     load_generic_keypoints_npz,
     load_legacy_dog27,
+    save_generic_keypoints_npz,
 )
 from gqmr.synthetic import available_motion_presets, generate_dog27_preset
 from gqmr.ui.preview import MotionPreview
+from gqmr.ui.video_pose import VideoPosePreviewDialog
 from gqmr.ui.worker import FunctionTask
 
 
@@ -88,6 +92,9 @@ class MainWindow(QMainWindow):
         self.repair_start_frame = 0
         self.animal_path: Path | None = None
         self.robot_path: Path | None = None
+        self.video_pose_path: Path | None = None
+        self.video_pose_output: Path | None = None
+        self.video_pose_batch = None
         self.project = new_project()
         self.project_path: Path | None = None
         self.play_timer = QTimer(self)
@@ -157,6 +164,42 @@ class MainWindow(QMainWindow):
         source_layout.addLayout(source_buttons)
         source_layout.addWidget(self.source_label)
         controls_layout.addWidget(source_group)
+
+        video_group = QGroupBox("狗视频动作提取")
+        video_layout = QFormLayout(video_group)
+        video_layout.setContentsMargins(14, 18, 14, 14)
+        video_layout.setHorizontalSpacing(10)
+        video_layout.setVerticalSpacing(10)
+        self.pose_backend_combo = QComboBox()
+        for entry_name, backend_type in sorted(discover_pose_backends().items()):
+            try:
+                info = backend_type().describe()
+                self.pose_backend_combo.addItem(info.name, entry_name)
+            except Exception:
+                continue
+        self.pose_config_edit = QLineEdit()
+        default_pose_config = (
+            Path(__file__).resolve().parents[3]
+            / "external_data/models/dog_pose/dog-mmpose.cuda.json"
+        )
+        if default_pose_config.is_file():
+            self.pose_config_edit.setText(str(default_pose_config))
+        self.pose_config_button = QPushButton("选择配置…")
+        pose_config_row = QHBoxLayout()
+        pose_config_row.addWidget(self.pose_config_edit, 1)
+        pose_config_row.addWidget(self.pose_config_button)
+        self.video_select_button = QPushButton("选择狗视频…")
+        self.video_extract_button = QPushButton("提取 2D 关键点")
+        self.video_extract_button.setObjectName("primaryButton")
+        self.video_status = QLabel("尚未选择视频")
+        self.video_status.setObjectName("sourceStatus")
+        self.video_status.setWordWrap(True)
+        video_layout.addRow("推理后端", self.pose_backend_combo)
+        video_layout.addRow("模型配置", pose_config_row)
+        video_layout.addRow(self.video_select_button)
+        video_layout.addRow(self.video_extract_button)
+        video_layout.addRow(self.video_status)
+        controls_layout.addWidget(video_group)
 
         retarget_group = QGroupBox("机器人与求解")
         retarget_layout = QFormLayout(retarget_group)
@@ -285,6 +328,9 @@ class MainWindow(QMainWindow):
 
         self.demo_button.clicked.connect(self.generate_demo)
         self.import_button.clicked.connect(self.import_motion)
+        self.pose_config_button.clicked.connect(self.select_pose_config)
+        self.video_select_button.clicked.connect(self.select_dog_video)
+        self.video_extract_button.clicked.connect(self.start_video_pose_extraction)
         self.retarget_button.clicked.connect(self.start_retarget)
         self.batch_button.clicked.connect(self.start_batch_evaluation)
         self.cancel_button.clicked.connect(self.cancel_task)
@@ -556,6 +602,18 @@ class MainWindow(QMainWindow):
 
     def _update_enabled(self) -> None:
         busy = self.active_task is not None
+        self.demo_button.setEnabled(not busy)
+        self.import_button.setEnabled(not busy)
+        self.video_select_button.setEnabled(not busy)
+        self.pose_config_button.setEnabled(not busy)
+        self.pose_backend_combo.setEnabled(not busy)
+        self.pose_config_edit.setEnabled(not busy)
+        self.video_extract_button.setEnabled(
+            not busy
+            and self.video_pose_path is not None
+            and self.pose_backend_combo.currentData() is not None
+            and bool(self.pose_config_edit.text().strip())
+        )
         self.retarget_button.setEnabled(self.animal_motion is not None and not busy)
         self.quality_button.setEnabled(self.robot_motion is not None and not busy)
         self.diagnose_button.setEnabled(self.robot_motion is not None and not busy)
@@ -667,13 +725,115 @@ class MainWindow(QMainWindow):
         except Exception as error:
             QMessageBox.critical(self, "导入失败", str(error))
 
-    def _run_task(self, function, success) -> None:
+    def select_pose_config(self) -> None:
+        filename, _ = QFileDialog.getOpenFileName(
+            self,
+            "选择狗视频推理配置",
+            self.pose_config_edit.text().strip(),
+            "JSON (*.json);;All files (*)",
+        )
+        if filename:
+            self.pose_config_edit.setText(filename)
+            self._update_enabled()
+
+    def select_dog_video(self) -> None:
+        filename, _ = QFileDialog.getOpenFileName(
+            self,
+            "选择狗视频",
+            "",
+            "Video (*.mp4 *.mov *.mkv *.avi *.webm *.m4v);;All files (*)",
+        )
+        if not filename:
+            return
+        self.video_pose_path = Path(filename)
+        self.video_pose_output = None
+        self.video_pose_batch = None
+        self.video_status.setText(
+            f"{self.video_pose_path.name}\n已选择，等待 GPU 提取"
+        )
+        self._update_enabled()
+
+    def _load_video_pose_config(self) -> dict:
+        path = Path(self.pose_config_edit.text().strip())
+        try:
+            document = loads_strict_json(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, StrictJSONError) as error:
+            raise ValueError(f"无法读取推理配置：{error}") from error
+        if not isinstance(document, dict):
+            raise ValueError("推理配置必须是 JSON 对象")
+        return document
+
+    def start_video_pose_extraction(self) -> None:
+        if self.video_pose_path is None:
+            return
+        try:
+            config = self._load_video_pose_config()
+        except Exception as error:
+            QMessageBox.critical(self, "配置无效", str(error))
+            return
+        suggested = self.video_pose_path.with_suffix(".2d.npz")
+        filename, _ = QFileDialog.getSaveFileName(
+            self, "保存 2D 关键点", str(suggested), "NPZ (*.npz)"
+        )
+        if not filename:
+            return
+        video_path = self.video_pose_path
+        output_path = Path(filename)
+        backend_name = str(self.pose_backend_combo.currentData())
+        self.video_status.setText(
+            f"{video_path.name}\n正在 GPU 提取，可点击“停止任务”"
+        )
+
+        def work(token):
+            batch = run_pose_video_backend_plugin(
+                backend_name,
+                config,
+                video_path,
+                batch_size=8,
+                cancelled=lambda: token.cancelled,
+            )
+            save_generic_keypoints_npz(output_path, batch)
+            return batch
+
+        def complete(batch) -> None:
+            self.video_pose_batch = batch
+            self.video_pose_output = output_path
+            valid_ratio = float(batch.valid_mask.mean())
+            self.video_status.setText(
+                f"{video_path.name}\n{len(batch.timestamps)} 帧 · "
+                f"{len(batch.keypoint_names)} 点 · 有效率 {valid_ratio:.1%}"
+            )
+            self._log(
+                {
+                    "video_pose": str(video_path),
+                    "output": str(output_path),
+                    "backend": backend_name,
+                    "frames": len(batch.timestamps),
+                    "dimensions": batch.dimensions,
+                    "keypoints": list(batch.keypoint_names),
+                    "valid_observation_ratio": valid_ratio,
+                    "next_step": "当前为 2D 结果，需时序 3D 提升后生成 DOG27。",
+                }
+            )
+            VideoPosePreviewDialog(
+                video_path, output_path, batch, self
+            ).exec()
+
+        def failed(text: str) -> None:
+            self.video_status.setText(
+                f"{video_path.name}\n提取失败或已取消，请查看运行记录"
+            )
+            self._log(text)
+
+        self._run_task(work, complete, failed)
+
+    def _run_task(self, function, success, failure=None) -> None:
         if self.active_task is not None:
             return
         task = FunctionTask(function)
         self.active_task = task
         task.signals.succeeded.connect(success)
-        task.signals.failed.connect(lambda text: self._log(text))
+        task.signals.failed.connect(failure or (lambda text: self._log(text)))
         task.signals.finished.connect(self._task_finished)
         self.thread_pool.start(task)
         self.statusBar().showMessage("任务运行中…")

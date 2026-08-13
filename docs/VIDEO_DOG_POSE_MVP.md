@@ -18,6 +18,16 @@ PyAV 增量解码 -> PoseBackendV1 -> KeypointBatch -> generic keypoint NPZ
 
 ## 命令
 
+桌面 GUI 也已提供同样的功能。启动 `gqmr gui` 后，在左侧“狗视频动作提取”中：
+
+1. 确认后端为 `MMPose dog 2D`。
+2. 选择本机模型 JSON 配置。
+3. 选择狗视频。
+4. 点击“提取 2D 关键点”并选择 NPZ 保存位置。
+5. 完成后查看带关键点覆盖的首帧预览。
+
+下面的 CLI 入口保留给自动化和批处理。
+
 列出当前环境安装的后端及能力：
 
 ```bash
