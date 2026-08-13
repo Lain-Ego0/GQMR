@@ -44,6 +44,8 @@
 - `KeypointBatch` 支持 2D/3D、多实例、置信度、有效掩码和坐标描述；已实现标定相机 DLT 三角化与重投影误差。
 - PyAV 解码保留原始 PTS/time base，关键点可按容差与视频精确对齐。
 - 姿态插件 API v1 和 entry point 发现已实现，长任务可通过 `spawn` 子进程运行和强制清理。
+- 已增加 `pose video` 增量推理闭环：长视频按批解码，严格校验后端输出 PTS/骨架/坐标系一致性，并保存源视频与配置 hash。
+- 仓库提供可选 `gqmr-dog-mmpose` 插件，用户安装与 GPU 匹配的 MMPose 运行栈和动物权重后，可从单只狗视频生成模型原生 2D 关键点 NPZ。
 
 ### 1.4 机器人泛化与 MuJoCo
 

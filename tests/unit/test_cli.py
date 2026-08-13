@@ -3,9 +3,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from gqmr.cli import main as cli_module
 from gqmr.cli.main import main
 from gqmr.core.io import load_motion, save_motion
 from gqmr.core.motion import AnimalMotion
+from gqmr.pose.api import PoseBackendInfo
 from test_motion_io import make_robot_motion
 
 
@@ -103,6 +105,35 @@ def test_synthetic_cli_generates_mit_motion(tmp_path: Path, capsys) -> None:
     assert output["frames"] == 11
     assert isinstance(motion, AnimalMotion)
     assert motion.metadata["source"]["gait"] == "turn"
+
+
+def test_pose_backends_cli_lists_capabilities(monkeypatch, capsys) -> None:
+    class FixtureBackend:
+        def describe(self) -> PoseBackendInfo:
+            return PoseBackendInfo(
+                api_version=1,
+                name="Dog Fixture",
+                package="gqmr-dog-fixture",
+                package_version="0.1",
+                skeleton_ids=("dog-20",),
+                dimensions=(2, 3),
+                multi_instance=False,
+                batch_range=(1, 32),
+                devices=("cpu", "cuda"),
+                output_coordinate_frame="image_pixels_x_right_y_down",
+            )
+
+    monkeypatch.setattr(
+        cli_module, "discover_pose_backends", lambda: {"dog-fixture": FixtureBackend}
+    )
+
+    result = main(["pose", "backends"])
+    output = json.loads(capsys.readouterr().out)
+
+    assert result == 0
+    assert output["count"] == 1
+    assert output["backends"][0]["entry_name"] == "dog-fixture"
+    assert output["backends"][0]["batch_range"] == [1, 32]
 
 
 def test_project_cli_new_add_info_and_pack(tmp_path: Path, capsys) -> None:

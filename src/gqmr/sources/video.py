@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from fractions import Fraction
 from pathlib import Path
 
@@ -12,13 +13,18 @@ from av.error import FFmpegError
 from gqmr.pose.api import KeypointBatch, PoseDataError, VideoFrameBatch
 
 
-def read_video_frames(
+def iter_video_frame_batches(
     path: str | Path,
     *,
+    batch_size: int = 16,
     start_seconds: float = 0.0,
     end_seconds: float | None = None,
     max_frames: int | None = None,
-) -> VideoFrameBatch:
+) -> Iterator[VideoFrameBatch]:
+    """Decode a video incrementally while preserving its presentation timestamps."""
+
+    if batch_size <= 0:
+        raise PoseDataError("video batch_size must be positive")
     if start_seconds < 0.0 or (end_seconds is not None and end_seconds <= start_seconds):
         raise PoseDataError("video time range is invalid")
     if max_frames is not None and max_frames <= 0:
@@ -26,6 +32,18 @@ def read_video_frames(
     frames: list[np.ndarray] = []
     pts: list[int] = []
     time_base: Fraction | None = None
+    decoded_frames = 0
+    frame_shape: tuple[int, ...] | None = None
+
+    def make_batch() -> VideoFrameBatch:
+        assert time_base is not None
+        return VideoFrameBatch(
+            frames=np.stack(frames),
+            pts=np.asarray(pts, dtype=np.int64),
+            time_base_numerator=time_base.numerator,
+            time_base_denominator=time_base.denominator,
+        )
+
     try:
         with av.open(str(path), mode="r") as container:
             if not container.streams.video:
@@ -44,19 +62,49 @@ def read_video_frames(
                     time_base = current_base
                 if current_base != time_base:
                     raise PoseDataError("video time base changed within one stream")
-                frames.append(frame.to_ndarray(format="rgb24"))
+                image = frame.to_ndarray(format="rgb24")
+                if frame_shape is None:
+                    frame_shape = image.shape
+                if image.shape != frame_shape:
+                    raise PoseDataError("video frame dimensions changed within one stream")
+                frames.append(image)
                 pts.append(int(frame.pts))
-                if max_frames is not None and len(frames) >= max_frames:
+                decoded_frames += 1
+                if len(frames) == batch_size:
+                    yield make_batch()
+                    frames.clear()
+                    pts.clear()
+                if max_frames is not None and decoded_frames >= max_frames:
                     break
     except (OSError, FFmpegError) as error:
         raise PoseDataError(f"cannot decode video: {error}") from error
-    if not frames or time_base is None:
+    if frames:
+        yield make_batch()
+    elif decoded_frames == 0:
         raise PoseDataError("selected video range contains no frames")
+
+
+def read_video_frames(
+    path: str | Path,
+    *,
+    start_seconds: float = 0.0,
+    end_seconds: float | None = None,
+    max_frames: int | None = None,
+) -> VideoFrameBatch:
+    batches = list(
+        iter_video_frame_batches(
+            path,
+            batch_size=max_frames or 4096,
+            start_seconds=start_seconds,
+            end_seconds=end_seconds,
+            max_frames=max_frames,
+        )
+    )
     return VideoFrameBatch(
-        frames=np.stack(frames),
-        pts=np.asarray(pts, dtype=np.int64),
-        time_base_numerator=time_base.numerator,
-        time_base_denominator=time_base.denominator,
+        frames=np.concatenate([batch.frames for batch in batches], axis=0),
+        pts=np.concatenate([batch.pts for batch in batches]),
+        time_base_numerator=batches[0].time_base_numerator,
+        time_base_denominator=batches[0].time_base_denominator,
     )
 
 

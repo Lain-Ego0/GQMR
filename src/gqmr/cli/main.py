@@ -22,6 +22,7 @@ from gqmr.assets import (
 )
 from gqmr.core.errors import GQMRError
 from gqmr.core.io import load_motion, save_motion
+from gqmr.core.json import StrictJSONError, loads_strict_json
 from gqmr.core.motion import AnimalMotion, RobotMotion
 from gqmr.exporters import export_deepmimic_json, export_isaaclab_amp_v232
 from gqmr.editing import (
@@ -38,7 +39,12 @@ from gqmr.project import (
     save_project,
 )
 from gqmr.project.model import EditCommand
-from gqmr.pose import keypoint_batch_to_animal_motion, triangulate_keypoints
+from gqmr.plugins import run_pose_video_backend_plugin
+from gqmr.pose import (
+    discover_pose_backends,
+    keypoint_batch_to_animal_motion,
+    triangulate_keypoints,
+)
 from gqmr.pose.api import PoseDataError
 from gqmr.retarget import (
     FastRetargetConfig,
@@ -278,6 +284,21 @@ def build_parser() -> argparse.ArgumentParser:
     project_pack.add_argument("destination", type=Path)
     pose_parser = subparsers.add_parser("pose", help="inspect and convert pose-result files")
     pose_commands = pose_parser.add_subparsers(dest="pose_command", required=True)
+    pose_commands.add_parser("backends", help="list installed video pose backends")
+    pose_video = pose_commands.add_parser(
+        "video", help="run an installed pose backend over a video"
+    )
+    pose_video.add_argument("path", type=Path)
+    pose_video.add_argument("--backend", required=True)
+    pose_video.add_argument(
+        "--config", type=Path, help="strict JSON configuration passed to the backend"
+    )
+    pose_video.add_argument("--batch-size", type=int, default=16)
+    pose_video.add_argument("--start", type=float, default=0.0)
+    pose_video.add_argument("--end", type=float)
+    pose_video.add_argument("--max-frames", type=int)
+    pose_video.add_argument("--timeout", type=float)
+    pose_video.add_argument("--output", type=Path, required=True)
     pose_inspect = pose_commands.add_parser("inspect", help="inspect keypoint results")
     pose_inspect.add_argument("path", type=Path)
     pose_inspect.add_argument(
@@ -666,7 +687,76 @@ def _pose_summary(path: Path, batch) -> dict[str, object]:
     }
 
 
+def _pose_backend_summaries() -> list[dict[str, object]]:
+    summaries: list[dict[str, object]] = []
+    for entry_name, backend_type in sorted(discover_pose_backends().items()):
+        try:
+            info = backend_type().describe()
+        except Exception as error:
+            raise PoseDataError(
+                f"cannot describe pose backend {entry_name!r}: {error}"
+            ) from error
+        summaries.append(
+            {
+                "entry_name": entry_name,
+                "api_version": info.api_version,
+                "name": info.name,
+                "package": info.package,
+                "package_version": info.package_version,
+                "skeleton_ids": list(info.skeleton_ids),
+                "dimensions": list(info.dimensions),
+                "multi_instance": info.multi_instance,
+                "batch_range": list(info.batch_range),
+                "devices": list(info.devices),
+                "output_coordinate_frame": info.output_coordinate_frame,
+            }
+        )
+    return summaries
+
+
+def _load_pose_backend_config(path: Path | None) -> dict[str, object]:
+    if path is None:
+        return {}
+    try:
+        document = loads_strict_json(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, StrictJSONError) as error:
+        raise PoseDataError(f"cannot read pose backend config: {error}") from error
+    if not isinstance(document, dict):
+        raise PoseDataError("pose backend config must be a JSON object")
+    return document
+
+
 def _run_pose(args: argparse.Namespace) -> dict[str, object]:
+    if args.pose_command == "backends":
+        backends = _pose_backend_summaries()
+        return {"backends": backends, "count": len(backends)}
+    if args.pose_command == "video":
+        available = discover_pose_backends()
+        if args.backend not in available:
+            installed = ", ".join(sorted(available)) or "none"
+            raise PoseDataError(
+                f"pose backend {args.backend!r} is not installed; available: {installed}"
+            )
+        if args.timeout is not None and args.timeout <= 0.0:
+            raise PoseDataError("pose backend timeout must be positive")
+        config = _load_pose_backend_config(args.config)
+        batch = run_pose_video_backend_plugin(
+            args.backend,
+            config,
+            args.path,
+            batch_size=args.batch_size,
+            start_seconds=args.start,
+            end_seconds=args.end,
+            max_frames=args.max_frames,
+            timeout=args.timeout,
+        )
+        save_generic_keypoints_npz(args.output, batch)
+        return {
+            **_pose_summary(args.path, batch),
+            "output": str(args.output),
+            "backend": args.backend,
+            "batches": batch.metadata["inference"]["batches"],
+        }
     if args.pose_command == "inspect":
         batch = _load_pose_file(args.path, args.format, args.fps)
         return _pose_summary(args.path, batch)

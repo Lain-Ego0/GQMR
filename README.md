@@ -26,6 +26,16 @@ GUI 的“动作测试集”提供 8 个固定、可复现动作：慢速/标准
 
 “导入动作”支持标准 AnimalMotion NPZ、旧版 dog-27 TXT，以及已经标定到 GQMR 世界坐标系的 3D 通用 keypoint JSON/NPZ/CSV。DeepLabCut/SLEAP 的 2D CSV 与多目三角化可通过 `gqmr pose` 命令转换后导入。
 
+犬类视频姿态 MVP 已提供增量视频解码和可选推理后端入口：
+
+```bash
+gqmr pose backends
+gqmr pose video dog.mp4 --backend dog-mmpose \
+  --config dog-mmpose.json --batch-size 16 --output dog.2d.npz
+```
+
+MMPose 犬类/animal 2D 后端位于 `plugins/gqmr-dog-mmpose`，需按 GPU/CUDA 环境独立安装。它保留原视频 PTS，并记录视频、模型配置和推理批次的可追溯元数据。当前输出为模型原生 2D 动物关键点，不宣称已完成单目 3D；实施边界与下一阶段见 [`VIDEO_DOG_POSE_MVP.md`](docs/VIDEO_DOG_POSE_MVP.md)。
+
 默认资产根目录是仓库根目录，完整模型位于 `GQMR/assets/<asset_id>/<commit>/`。如果机器人区域提示资产不可用，执行 `gqmr assets status`检查逐文件哈希。自定义位置使用 `--asset-root`；旧的 `--cache-dir` 参数仅作兼容别名保留。
 
 最短演示闭环：
