@@ -63,22 +63,57 @@ def estimate_root_motion(
     valid = np.empty(frames, dtype=np.bool_)
     previous_rotation: np.ndarray | None = None
     previous_position = np.zeros(3, dtype=np.float64)
+    source_metadata = motion.metadata.get("source", {})
+    use_shoulder_hip_axis = (
+        isinstance(source_metadata, dict)
+        and source_metadata.get("root_orientation_mode") == "shoulder_hip_axis"
+    )
 
     for frame in range(frames):
         pelvis_id = landmarks["pelvis"]
         neck_id = landmarks["neck"]
+        left_shoulder_id = landmarks["left_shoulder"]
+        right_shoulder_id = landmarks["right_shoulder"]
+        left_hip_id = landmarks["left_hip"]
+        right_hip_id = landmarks["right_hip"]
         root_point_ids = tuple(landmarks.values())
         usable = all(motion.valid_mask[frame, point_id] for point_id in root_point_ids)
-        pelvis_neck_usable = (
-            motion.valid_mask[frame, pelvis_id] and motion.valid_mask[frame, neck_id]
-        )
-        if pelvis_neck_usable:
-            root_position = 0.5 * (
-                motion.positions[frame, pelvis_id] + motion.positions[frame, neck_id]
+        if use_shoulder_hip_axis:
+            position_usable = all(
+                motion.valid_mask[frame, point_id]
+                for point_id in (
+                    left_shoulder_id,
+                    right_shoulder_id,
+                    left_hip_id,
+                    right_hip_id,
+                )
             )
-            previous_position = np.asarray(root_position, dtype=np.float64)
+            if position_usable:
+                shoulder_center = 0.5 * (
+                    motion.positions[frame, left_shoulder_id]
+                    + motion.positions[frame, right_shoulder_id]
+                )
+                hip_center = 0.5 * (
+                    motion.positions[frame, left_hip_id]
+                    + motion.positions[frame, right_hip_id]
+                )
+                root_position = 0.5 * (shoulder_center + hip_center)
+            else:
+                root_position = previous_position
         else:
-            root_position = previous_position
+            position_usable = (
+                motion.valid_mask[frame, pelvis_id]
+                and motion.valid_mask[frame, neck_id]
+            )
+            if position_usable:
+                root_position = 0.5 * (
+                    motion.positions[frame, pelvis_id]
+                    + motion.positions[frame, neck_id]
+                )
+            else:
+                root_position = previous_position
+        if position_usable:
+            previous_position = np.asarray(root_position, dtype=np.float64)
         positions[frame] = root_position
         if not usable:
             rotations[frame] = (
@@ -91,7 +126,14 @@ def estimate_root_motion(
             continue
 
         points = motion.positions[frame]
-        forward = _normalize(points[neck_id] - points[pelvis_id])
+        if use_shoulder_hip_axis:
+            shoulder_center = 0.5 * (
+                points[left_shoulder_id] + points[right_shoulder_id]
+            )
+            hip_center = 0.5 * (points[left_hip_id] + points[right_hip_id])
+            forward = _normalize(shoulder_center - hip_center)
+        else:
+            forward = _normalize(points[neck_id] - points[pelvis_id])
         shoulder_left = _normalize(
             points[landmarks["left_shoulder"]]
             - points[landmarks["right_shoulder"]]
@@ -205,9 +247,65 @@ def estimate_contact_probability(
         point = np.asarray(ground.point, dtype=np.float64)
         normal = np.asarray(ground.normal, dtype=np.float64)
         height = np.einsum("tli,i->tl", toe_positions - point, normal)
-    height_score = 1.0 / (1.0 + np.exp((height - height_threshold) / 0.01))
-    speed_score = 1.0 / (1.0 + np.exp((speed - speed_threshold) / 0.08))
-    probability = height_score * speed_score
+    source_metadata = motion.metadata.get("source", {})
+    adaptive_monocular = (
+        isinstance(source_metadata, dict)
+        and source_metadata.get("root_orientation_mode") == "shoulder_hip_axis"
+    )
+    if adaptive_monocular:
+        probability = np.zeros_like(height, dtype=np.float64)
+        for leg in range(4):
+            usable = (
+                toe_valid[:, leg]
+                & np.isfinite(height[:, leg])
+                & np.isfinite(speed[:, leg])
+            )
+            if not np.any(usable):
+                probability[:, leg] = np.nan
+                continue
+            low, high = np.percentile(height[usable, leg], (10.0, 90.0))
+            adaptive_height = low + 0.5 * (high - low)
+            height_width = max(0.005, 0.15 * (high - low))
+            adaptive_speed = max(
+                speed_threshold,
+                float(np.percentile(speed[usable, leg], 45.0)),
+            )
+            speed_width = max(0.05, 0.15 * adaptive_speed)
+            height_argument = np.clip(
+                (height[:, leg] - adaptive_height) / height_width,
+                -60.0,
+                60.0,
+            )
+            speed_argument = np.clip(
+                (speed[:, leg] - adaptive_speed) / speed_width,
+                -60.0,
+                60.0,
+            )
+            height_score = 1.0 / (1.0 + np.exp(height_argument))
+            speed_score = 1.0 / (1.0 + np.exp(speed_argument))
+            probability[:, leg] = np.sqrt(height_score * speed_score)
+        if motion.frame_count >= 5:
+            padded = np.pad(probability, ((2, 2), (0, 0)), mode="edge")
+            probability = np.stack(
+                [
+                    np.median(padded[index : index + 5], axis=0)
+                    for index in range(motion.frame_count)
+                ]
+            )
+    else:
+        height_score = 1.0 / (
+            1.0
+            + np.exp(
+                np.clip((height - height_threshold) / 0.01, -60.0, 60.0)
+            )
+        )
+        speed_score = 1.0 / (
+            1.0
+            + np.exp(
+                np.clip((speed - speed_threshold) / 0.08, -60.0, 60.0)
+            )
+        )
+        probability = height_score * speed_score
     probability[~toe_valid] = np.nan
     return np.ascontiguousarray(np.clip(probability, 0.0, 1.0), dtype=np.float32)
 

@@ -135,8 +135,14 @@ def _contact_locked_targets(
     desired = target.copy()
     frames = len(target)
     for leg in range(4):
-        mask = np.isfinite(probability[:, leg]) & (
-            probability[:, leg] >= config.contact_threshold
+        leg_probability = probability[:, leg].astype(np.float64)
+        continuous_probability = np.any(
+            np.isfinite(leg_probability)
+            & (leg_probability > 0.05)
+            & (leg_probability < 0.95)
+        )
+        mask = np.isfinite(leg_probability) & (
+            leg_probability >= config.contact_threshold
         )
         start = 0
         while start < frames:
@@ -149,6 +155,29 @@ def _contact_locked_targets(
             anchor = np.median(achieved[start:stop, leg], axis=0)
             anchor[2] = max(anchor[2], config.minimum_foot_height)
             desired[start:stop, leg] = anchor
+            blend_frames = 4 if continuous_probability else 0
+            before_start = max(0, start - blend_frames)
+            before = np.arange(before_start, start, dtype=np.int32)
+            before = before[~mask[before]]
+            if len(before):
+                weight = (
+                    np.arange(1, len(before) + 1, dtype=np.float64)
+                    / (len(before) + 1.0)
+                )[:, None]
+                desired[before, leg] = (
+                    (1.0 - weight) * target[before, leg] + weight * anchor
+                )
+            after_stop = min(frames, stop + blend_frames)
+            after = np.arange(stop, after_stop, dtype=np.int32)
+            after = after[~mask[after]]
+            if len(after):
+                weight = (
+                    np.arange(len(after), 0, -1, dtype=np.float64)
+                    / (len(after) + 1.0)
+                )[:, None]
+                desired[after, leg] = (
+                    (1.0 - weight) * target[after, leg] + weight * anchor
+                )
             start = stop
     desired[..., 2] = np.maximum(desired[..., 2], config.minimum_foot_height)
     return desired
@@ -189,7 +218,21 @@ def retarget_high_quality(
 ) -> tuple[RobotMotion, RetargetDiagnostics]:
     """Run contact-aware root-pose refinement, optionally on one frame interval."""
 
-    config = config or HighQualityRetargetConfig()
+    default_config = HighQualityRetargetConfig()
+    config = config or default_config
+    source_metadata = motion.metadata.get("source", {})
+    if (
+        isinstance(source_metadata, dict)
+        and source_metadata.get("root_orientation_mode")
+        == "shoulder_hip_axis"
+    ):
+        side_view_overrides: dict[str, float] = {}
+        if config.smoothness == default_config.smoothness:
+            side_view_overrides["smoothness"] = 0.003
+        if config.residual_tolerance == default_config.residual_tolerance:
+            side_view_overrides["residual_tolerance"] = 0.005
+        if side_view_overrides:
+            config = replace(config, **side_view_overrides)
     fast_motion, fast_diagnostics = retarget_fast(
         motion, robot, skeleton=skeleton, config=fast_config
     )

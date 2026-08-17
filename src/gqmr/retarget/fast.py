@@ -37,6 +37,7 @@ class FastRetargetConfig:
     unreachable_residual: float = 0.10
     root_translation_scale: float | None = None
     foot_motion_scale: float = 1.0
+    side_view_motion_scale: float = 0.65
     maximum_leg_reach_ratio: float = 0.98
 
     def __post_init__(self) -> None:
@@ -46,6 +47,7 @@ class FastRetargetConfig:
             self.residual_tolerance,
             self.unreachable_residual,
             self.foot_motion_scale,
+            self.side_view_motion_scale,
             self.maximum_leg_reach_ratio,
         )
         if self.max_iterations <= 0 or not np.all(np.isfinite(numeric)):
@@ -65,6 +67,8 @@ class FastRetargetConfig:
             )
         if self.maximum_leg_reach_ratio > 1.0:
             raise FastRetargetError("maximum_leg_reach_ratio must not exceed 1")
+        if self.side_view_motion_scale > 1.0:
+            raise FastRetargetError("side_view_motion_scale must not exceed 1")
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,6 +119,7 @@ def _build_targets(
     robot: RobotModel,
     skeleton: AnimalSkeleton,
     config: FastRetargetConfig,
+    contact_probability: np.ndarray,
 ) -> tuple[
     np.ndarray,
     np.ndarray,
@@ -158,19 +163,54 @@ def _build_targets(
     default_leg_anchors_local = default_root_rotation.inv().apply(
         leg_joint_anchors_world[:, 0] - default_root_position
     )
-    maximum_leg_reaches = np.array(
-        [
-            np.sum(np.linalg.norm(np.diff(anchors, axis=0), axis=1))
-            + np.linalg.norm(default_feet_world[index] - anchors[-1])
-            for index, anchors in enumerate(leg_joint_anchors_world)
-        ],
-        dtype=np.float64,
+    # A geometric link-length sum is not a reachable workspace bound when the
+    # knee cannot become straight. Measure the joint-limit-respecting extended
+    # pose so targets do not drive the calf joint hard against its upper limit.
+    extended_q = np.asarray(
+        robot.config.default_dof_position, dtype=np.float64
+    ).copy()
+    maximum_leg_reaches = np.zeros(len(LEG_ORDER), dtype=np.float64)
+    calf_lower = robot.joint_ranges[2::3, 0]
+    calf_upper = robot.joint_ranges[2::3, 1]
+    for fraction in np.linspace(0.0, 1.0, 17):
+        extended_q[2::3] = calf_lower + fraction * (calf_upper - calf_lower)
+        robot.set_pose(
+            robot.config.default_root_position,
+            robot.config.default_root_rotation,
+            extended_q,
+        )
+        extended_feet_world = robot.foot_positions()
+        extended_leg_anchors_world = np.stack(
+            [
+                robot.data.xanchor[
+                    robot.joint_ids[index * 3 : (index + 1) * 3]
+                ]
+                for index in range(len(LEG_ORDER))
+            ]
+        )
+        maximum_leg_reaches = np.maximum(
+            maximum_leg_reaches,
+            np.linalg.norm(
+                extended_feet_world - extended_leg_anchors_world[:, 0], axis=1
+            ),
+        )
+    robot.set_pose(
+        robot.config.default_root_position,
+        robot.config.default_root_rotation,
+        robot.config.default_dof_position,
     )
 
     front_center = 0.5 * (default_feet_local[0] + default_feet_local[1])
     rear_center = 0.5 * (default_feet_local[2] + default_feet_local[3])
     robot_body_length = float(np.linalg.norm(front_center - rear_center))
     root_scale = config.root_translation_scale or robot_body_length / body_scale.torso_length
+    source_metadata = motion.metadata.get("source", {})
+    side_view_scale = (
+        config.side_view_motion_scale
+        if isinstance(source_metadata, dict)
+        and source_metadata.get("root_orientation_mode") == "shoulder_hip_axis"
+        else 1.0
+    )
     leg_scales = {
         leg: float(
             np.linalg.norm(
@@ -179,6 +219,7 @@ def _build_targets(
             / body_scale.leg_lengths[leg]
         )
         * config.foot_motion_scale
+        * side_view_scale
         for index, leg in enumerate(LEG_ORDER)
     }
 
@@ -267,6 +308,15 @@ def _build_targets(
             > max(0.015, global_radius)
         ):
             source_neutral_limb_vectors[index] = global_neutral
+        contact_usable = (
+            all_usable
+            & np.isfinite(contact_probability[:, index])
+            & (contact_probability[:, index] >= 0.5)
+        )
+        if np.count_nonzero(contact_usable) >= 3:
+            source_neutral_limb_vectors[index, 2] = np.median(
+                source_limb_vectors_local[contact_usable, index, 2]
+            )
 
     source_limb_delta = (
         source_limb_vectors_local - source_neutral_limb_vectors[None, :, :]
@@ -278,6 +328,9 @@ def _build_targets(
                 source_limb_delta[frame, index] * leg_scales[leg]
                 for index, leg in enumerate(LEG_ORDER)
             ]
+        )
+        local_target[:, 2] = np.maximum(
+            local_target[:, 2], default_feet_local[:, 2]
         )
         leg_vectors = local_target - default_leg_anchors_local
         leg_vector_norms = np.linalg.norm(leg_vectors, axis=1)
@@ -323,6 +376,10 @@ def retarget_fast(
 
     skeleton = skeleton or get_skeleton(motion.metadata["skeleton_id"])
     config = config or FastRetargetConfig()
+    contact = motion.contact_probability.copy()
+    if np.any(~np.isfinite(contact)):
+        estimated = estimate_contact_probability(motion, skeleton)
+        contact = np.where(np.isfinite(contact), contact, estimated)
     try:
         (
             root_position,
@@ -332,7 +389,7 @@ def retarget_fast(
             root_status,
             root_scale,
             leg_scales,
-        ) = _build_targets(motion, robot, skeleton, config)
+        ) = _build_targets(motion, robot, skeleton, config, contact)
     except (KeyError, ValueError) as error:
         if isinstance(error, FastRetargetError):
             raise
@@ -396,10 +453,6 @@ def retarget_fast(
             achieved_feet[frame] = robot.foot_positions()
             solver_status[frame] = SolverStatus.NUMERICAL_ERROR
 
-    contact = motion.contact_probability.copy()
-    if np.any(~np.isfinite(contact)):
-        estimated = estimate_contact_probability(motion, skeleton)
-        contact = np.where(np.isfinite(contact), contact, estimated)
     dof_velocity = _differentiate_linear(motion.timestamps, dof_position)
     root_linear_velocity = _differentiate_linear(motion.timestamps, root_position)
     root_angular_velocity = _differentiate_rotation(motion.timestamps, root_rotation)

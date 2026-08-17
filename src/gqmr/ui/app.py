@@ -131,6 +131,7 @@ class MainWindow(QMainWindow):
         product.setObjectName("productName")
         self.project_label = QLabel("未保存工程")
         self.project_label.setObjectName("projectState")
+        self.project_label.setToolTip("当前工程")
         header_layout.addWidget(brand)
         header_layout.addWidget(product)
         header_layout.addStretch(1)
@@ -142,15 +143,42 @@ class MainWindow(QMainWindow):
         splitter.setHandleWidth(1)
         controls = QFrame()
         controls.setObjectName("sidebar")
-        controls.setMinimumWidth(300)
-        controls.setMaximumWidth(340)
+        controls.setMinimumWidth(360)
+        controls.setMaximumWidth(410)
         controls_layout = QVBoxLayout(controls)
         controls_layout.setContentsMargins(18, 18, 18, 18)
-        controls_layout.setSpacing(14)
+        controls_layout.setSpacing(10)
 
-        source_group = QGroupBox("输入动作")
+        workflow_title = QLabel("操作流程")
+        workflow_title.setObjectName("workflowTitle")
+        workflow_hint = QLabel("按顺序完成；已有 3D 动作可跳过第 2 步")
+        workflow_hint.setObjectName("workflowHint")
+        workflow_hint.setWordWrap(True)
+        workflow_bar = QFrame()
+        workflow_bar.setObjectName("workflowBar")
+        workflow_bar_layout = QHBoxLayout(workflow_bar)
+        workflow_bar_layout.setContentsMargins(8, 8, 8, 8)
+        workflow_bar_layout.setSpacing(4)
+        for index, label in enumerate(("源动作", "3D 化", "重定向", "导出"), start=1):
+            step = QLabel(f"{index}  {label}")
+            step.setObjectName("workflowStep")
+            step.setAlignment(Qt.AlignCenter)
+            workflow_bar_layout.addWidget(step, 1)
+            if index < 4:
+                arrow = QLabel("›")
+                arrow.setObjectName("workflowArrow")
+                arrow.setAlignment(Qt.AlignCenter)
+                workflow_bar_layout.addWidget(arrow)
+        controls_layout.addWidget(workflow_title)
+        controls_layout.addWidget(workflow_hint)
+        controls_layout.addWidget(workflow_bar)
+
+        source_group = QGroupBox("1  准备源动作")
         source_layout = QVBoxLayout(source_group)
         source_layout.setSpacing(10)
+        source_hint = QLabel("生成预设、导入 3D，或从视频提取 2D")
+        source_hint.setObjectName("stepHint")
+        source_hint.setWordWrap(True)
         self.motion_preset_combo = QComboBox()
         for preset in available_motion_presets():
             self.motion_preset_combo.addItem(preset.label, preset.id)
@@ -159,20 +187,23 @@ class MainWindow(QMainWindow):
         )
         self.motion_preset_combo.setToolTip("固定参数、可重复生成，适合跨机器人对比")
         source_buttons = QHBoxLayout()
-        self.demo_button = QPushButton("生成所选动作")
-        self.import_button = QPushButton("导入动作…")
+        self.demo_button = QPushButton("生成预设")
+        self.demo_button.setToolTip("按上方选项生成可重复的 3D 测试动作")
+        self.import_button = QPushButton("导入 3D…")
+        self.import_button.setToolTip("导入已有的动物 3D 动作")
         source_buttons.addWidget(self.demo_button)
         source_buttons.addWidget(self.import_button)
         self.source_label = QLabel("尚未载入动作")
         self.source_label.setObjectName("sourceStatus")
         self.source_label.setWordWrap(True)
         self.source_label.setMinimumHeight(58)
+        source_layout.addWidget(source_hint)
         source_layout.addWidget(self.motion_preset_combo)
         source_layout.addLayout(source_buttons)
         source_layout.addWidget(self.source_label)
         controls_layout.addWidget(source_group)
 
-        video_group = QGroupBox("狗视频动作提取")
+        video_group = QGroupBox("1A  视频提取 2D（可选）")
         video_layout = QFormLayout(video_group)
         video_layout.setContentsMargins(14, 18, 14, 14)
         video_layout.setHorizontalSpacing(10)
@@ -191,18 +222,23 @@ class MainWindow(QMainWindow):
         )
         if default_pose_config.is_file():
             self.pose_config_edit.setText(str(default_pose_config))
-        self.pose_config_button = QPushButton("选择配置…")
+        self.pose_config_button = QPushButton("选择…")
+        self.pose_config_button.setToolTip("选择姿态推理模型配置")
         pose_config_row = QHBoxLayout()
         pose_config_row.addWidget(self.pose_config_edit, 1)
         pose_config_row.addWidget(self.pose_config_button)
-        self.video_select_button = QPushButton("选择狗视频…")
-        self.video_pose_select_button = QPushButton("载入已有 2D…")
+        self.video_select_button = QPushButton("选视频…")
+        self.video_select_button.setToolTip("选择需要提取动作的狗视频")
+        self.video_pose_select_button = QPushButton("载入 2D…")
+        self.video_pose_select_button.setToolTip("载入已有的 2D 关键点结果")
         video_source_row = QHBoxLayout()
         video_source_row.addWidget(self.video_select_button)
         video_source_row.addWidget(self.video_pose_select_button)
-        self.video_extract_button = QPushButton("提取 2D 关键点")
+        self.video_extract_button = QPushButton("提取 2D")
+        self.video_extract_button.setToolTip("从所选视频提取 2D 关键点")
         self.video_extract_button.setObjectName("primaryButton")
-        self.video_pose_preview_button = QPushButton("预览 2D 叠加")
+        self.video_pose_preview_button = QPushButton("预览叠加")
+        self.video_pose_preview_button.setToolTip("预览关键点在原视频上的叠加效果")
         video_action_row = QHBoxLayout()
         video_action_row.addWidget(self.video_extract_button)
         video_action_row.addWidget(self.video_pose_preview_button)
@@ -216,7 +252,7 @@ class MainWindow(QMainWindow):
         video_layout.addRow(self.video_status)
         controls_layout.addWidget(video_group)
 
-        lift_group = QGroupBox("单目实验性 3D 提升")
+        lift_group = QGroupBox("2  将 2D 转为 3D（可选）")
         lift_layout = QFormLayout(lift_group)
         lift_layout.setContentsMargins(14, 18, 14, 14)
         lift_layout.setHorizontalSpacing(10)
@@ -249,9 +285,11 @@ class MainWindow(QMainWindow):
         self.monocular_confidence_threshold.setDecimals(2)
         self.monocular_confidence_threshold.setSingleStep(0.05)
         self.monocular_confidence_threshold.setValue(0.15)
-        self.monocular_preprocess = QCheckBox("自动修复、平滑并估计地面接触")
+        self.monocular_preprocess = QCheckBox("自动修复、平滑与接触估计")
+        self.monocular_preprocess.setToolTip("自动修复异常点、平滑动作并估计地面接触")
         self.monocular_preprocess.setChecked(True)
-        self.monocular_lift_button = QPushButton("生成并载入 3D 动作…")
+        self.monocular_lift_button = QPushButton("生成 3D 动作")
+        self.monocular_lift_button.setToolTip("将当前 2D 关键点提升为 DOG27 3D 动作并载入")
         self.monocular_lift_button.setObjectName("primaryButton")
         self.monocular_status = QLabel("请先提取或载入 AP-10K 2D 关键点")
         self.monocular_status.setObjectName("sourceStatus")
@@ -267,7 +305,7 @@ class MainWindow(QMainWindow):
         lift_layout.addRow(self.monocular_status)
         controls_layout.addWidget(lift_group)
 
-        retarget_group = QGroupBox("机器人与求解")
+        retarget_group = QGroupBox("3  重定向到机器人")
         retarget_layout = QFormLayout(retarget_group)
         retarget_layout.setContentsMargins(14, 18, 14, 14)
         retarget_layout.setHorizontalSpacing(10)
@@ -288,7 +326,7 @@ class MainWindow(QMainWindow):
         self.batch_scope_combo = QComboBox()
         self.batch_scope_combo.addItem("当前机器人 × 全部动作", "current_robot")
         self.batch_scope_combo.addItem("全部机器人 × 全部动作", "all_robots")
-        self.batch_button = QPushButton("批量评估泛化性能")
+        self.batch_button = QPushButton("批量评估")
         self.batch_button.setToolTip("逐项运行固定动作测试集，并输出统一质量指标")
         self.model_status = QLabel("模型尚未加载")
         self.model_status.setObjectName("modelStatus")
@@ -304,7 +342,7 @@ class MainWindow(QMainWindow):
         retarget_layout.addRow(self.cancel_button)
         controls_layout.addWidget(retarget_group)
 
-        export_group = QGroupBox("检查与输出")
+        export_group = QGroupBox("4  检查并导出")
         export_layout = QFormLayout(export_group)
         export_layout.setContentsMargins(14, 18, 14, 14)
         export_layout.setHorizontalSpacing(10)
@@ -313,11 +351,14 @@ class MainWindow(QMainWindow):
         self.format_combo.addItem("Isaac Lab AMP", "isaaclab_amp_v232")
         self.format_combo.addItem("GQMR 标准 NPZ", "canonical")
         self.format_combo.addItem("DeepMimic JSON", "deepmimic")
-        self.quality_button = QPushButton("生成质量报告")
+        self.quality_button = QPushButton("质量报告")
+        self.quality_button.setToolTip("生成当前机器人动作的完整质量报告")
         self.diagnose_button = QPushButton("分析问题帧")
         self.mark_repair_start_button = QPushButton("设为修复起点")
-        self.repair_button = QPushButton("重算选中区间")
-        self.environment_button = QPushButton("重估选区接触/地面")
+        self.repair_button = QPushButton("修复选区")
+        self.repair_button.setToolTip("重新计算从修复起点到当前帧的区间")
+        self.environment_button = QPushButton("重估接触与地面")
+        self.environment_button.setToolTip("重新估计选中区间的足端接触与地面")
         self.export_button = QPushButton("导出…")
         export_layout.addRow("输出格式", self.format_combo)
         export_layout.addRow(self.quality_button)
@@ -381,13 +422,13 @@ class MainWindow(QMainWindow):
         controls_scroll.setObjectName("sidebarScroll")
         controls_scroll.setFrameShape(QFrame.NoFrame)
         controls_scroll.setWidgetResizable(True)
-        controls_scroll.setMinimumWidth(300)
-        controls_scroll.setMaximumWidth(340)
+        controls_scroll.setMinimumWidth(360)
+        controls_scroll.setMaximumWidth(410)
         controls_scroll.setWidget(controls)
         splitter.addWidget(controls_scroll)
         splitter.addWidget(center)
         splitter.setStretchFactor(1, 1)
-        splitter.setSizes([320, 1120])
+        splitter.setSizes([390, 1050])
         root_layout.addWidget(splitter, 1)
         self.setCentralWidget(central)
         self.setStatusBar(QStatusBar())
@@ -462,8 +503,8 @@ class MainWindow(QMainWindow):
         )
 
     def _apply_style(self) -> None:
-        self.setStyleSheet(
-            """
+        icon_dir = (Path(__file__).resolve().parent / "icons").as_posix()
+        style = """
             * {
                 font-family: "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
                 font-size: 14px;
@@ -503,6 +544,35 @@ class MainWindow(QMainWindow):
             }
             QScrollArea#sidebarScroll > QWidget > QWidget {
                 background: #ebe7df;
+            }
+            QLabel#workflowTitle {
+                font-size: 18px;
+                font-weight: 750;
+                color: #252422;
+            }
+            QLabel#workflowHint, QLabel#stepHint {
+                color: #716d66;
+                font-size: 13px;
+            }
+            QFrame#workflowBar {
+                background: #ddd7cd;
+                border: 1px solid #d0c9be;
+                border-radius: 5px;
+            }
+            QLabel#workflowStep {
+                min-height: 28px;
+                padding: 0 3px;
+                background: #ffffff;
+                border: 1px solid #c9c2b8;
+                border-radius: 4px;
+                color: #3c3833;
+                font-size: 12px;
+                font-weight: 650;
+            }
+            QLabel#workflowArrow {
+                color: #8a8278;
+                font-size: 19px;
+                font-weight: 700;
             }
             QGroupBox {
                 background: #ffffff;
@@ -570,20 +640,92 @@ class MainWindow(QMainWindow):
                 border-color: #34312d;
                 color: #ffffff;
             }
-            QLineEdit, QComboBox {
+            QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {
                 min-height: 32px;
                 padding: 2px 8px;
                 background: #ffffff;
                 border: 1px solid #bdb7ad;
                 border-radius: 3px;
+                color: #292724;
                 selection-background-color: #d9a58f;
+                selection-color: #252422;
             }
-            QLineEdit:focus, QComboBox:focus {
+            QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {
                 border: 1px solid #b8522f;
             }
+            QLineEdit:disabled, QComboBox:disabled,
+            QSpinBox:disabled, QDoubleSpinBox:disabled {
+                color: #8f8980;
+                background: #f1eee8;
+                border-color: #d9d4cb;
+            }
             QComboBox::drop-down {
-                width: 24px;
+                width: 28px;
+                background: #f3f0ea;
                 border: none;
+                border-left: 1px solid #d0cbc2;
+                border-top-right-radius: 3px;
+                border-bottom-right-radius: 3px;
+            }
+            QComboBox::down-arrow {
+                image: url(__UI_ICON_DIR__/chevron-down-dark.svg);
+                width: 9px;
+                height: 9px;
+            }
+            QComboBox QAbstractItemView {
+                background: #ffffff;
+                color: #292724;
+                border: 1px solid #bdb7ad;
+                outline: none;
+                selection-background-color: #e7c2b2;
+                selection-color: #252422;
+                padding: 4px;
+            }
+            QSpinBox, QDoubleSpinBox {
+                padding-right: 24px;
+            }
+            QSpinBox::up-button, QDoubleSpinBox::up-button,
+            QSpinBox::down-button, QDoubleSpinBox::down-button {
+                width: 20px;
+                background: #f3f0ea;
+                border-left: 1px solid #d0cbc2;
+            }
+            QSpinBox::up-button, QDoubleSpinBox::up-button {
+                border-bottom: 1px solid #d0cbc2;
+                border-top-right-radius: 3px;
+            }
+            QSpinBox::down-button, QDoubleSpinBox::down-button {
+                border-bottom-right-radius: 3px;
+            }
+            QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {
+                image: url(__UI_ICON_DIR__/chevron-up-dark.svg);
+                width: 8px;
+                height: 8px;
+            }
+            QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {
+                image: url(__UI_ICON_DIR__/chevron-down-dark.svg);
+                width: 8px;
+                height: 8px;
+            }
+            QCheckBox {
+                color: #34312d;
+                spacing: 8px;
+            }
+            QCheckBox::indicator {
+                width: 17px;
+                height: 17px;
+                background: #ffffff;
+                border: 1px solid #9f988e;
+                border-radius: 3px;
+            }
+            QCheckBox::indicator:checked {
+                image: url(__UI_ICON_DIR__/check-light.svg);
+                background: #b8522f;
+                border-color: #9e4325;
+            }
+            QCheckBox::indicator:disabled {
+                background: #e8e4dd;
+                border-color: #cfc9bf;
             }
             QFrame#playbackBar {
                 background: #ffffff;
@@ -628,9 +770,42 @@ class MainWindow(QMainWindow):
             QMenuBar::item:selected, QMenu::item:selected {
                 background: #eee9e1;
             }
+            QMenuBar::item, QMenu::item {
+                color: #292724;
+            }
             QMenu {
                 background: #ffffff;
                 border: 1px solid #cfc9bf;
+                padding: 5px;
+            }
+            QMenu::item {
+                min-width: 150px;
+                padding: 7px 24px 7px 12px;
+            }
+            QScrollBar:vertical {
+                width: 12px;
+                margin: 0;
+                background: #eeeae3;
+            }
+            QScrollBar::handle:vertical {
+                min-height: 32px;
+                margin: 2px;
+                background: #aaa298;
+                border-radius: 4px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #827a70;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical,
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+                height: 0;
+                background: transparent;
+            }
+            QToolTip {
+                color: #ffffff;
+                background: #34312d;
+                border: 1px solid #5b5650;
+                padding: 6px 8px;
             }
             QStatusBar {
                 background: #ffffff;
@@ -638,7 +813,7 @@ class MainWindow(QMainWindow):
                 color: #625e57;
             }
             """
-        )
+        self.setStyleSheet(style.replace("__UI_ICON_DIR__", icon_dir))
 
     def _cache_dir(self) -> Path | None:
         text = self.cache_edit.text().strip()

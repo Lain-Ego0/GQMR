@@ -151,6 +151,23 @@ def test_lift_ap10k_monocular_to_dog27() -> None:
         "experimental_monocular_ap10k_lift_v1"
     )
     assert motion.metadata["source"]["parameters"]["facing"] == "left"
+    assert motion.metadata["source"]["lifting_algorithm"] == (
+        "side_view_rigid_torso_v2"
+    )
+    assert motion.metadata["source"]["root_orientation_mode"] == (
+        "shoulder_hip_axis"
+    )
+    index = skeleton.name_to_index
+    shoulder_delta = (
+        motion.positions[:, index["left_shoulder"]]
+        - motion.positions[:, index["right_shoulder"]]
+    )
+    hip_delta = (
+        motion.positions[:, index["left_hip"]]
+        - motion.positions[:, index["right_hip"]]
+    )
+    assert np.max(np.abs(shoulder_delta[:, [0, 2]])) < 1e-7
+    assert np.max(np.abs(hip_delta[:, [0, 2]])) < 1e-7
 
 
 def test_pyav_video_pts_and_keypoint_alignment(tmp_path: Path) -> None:

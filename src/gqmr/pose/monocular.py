@@ -263,6 +263,25 @@ def lift_ap10k_monocular_to_dog27(
     tail_base = world["tail_root"]
     tail_base[:, 1] = 0.0
 
+    # In a side view, the small image-plane separation of a left/right torso
+    # pair is dominated by detector noise. Interpreting it as measured depth
+    # creates large false body roll and lateral foot travel after retargeting.
+    # Preserve each observed pair centre and impose the anatomical width prior
+    # on the rigid shoulder and hip anchors instead.
+    shoulder_center = 0.5 * (
+        world["left_shoulder"] + world["right_shoulder"]
+    )
+    shoulder_center[:, 1] = 0.0
+    hip_center = 0.5 * (world["left_hip"] + world["right_hip"])
+    hip_center[:, 1] = 0.0
+    rigid_shoulder: dict[str, np.ndarray] = {}
+    rigid_hip: dict[str, np.ndarray] = {}
+    for side, lateral_sign in (("left", 1.0), ("right", -1.0)):
+        rigid_shoulder[side] = shoulder_center.copy()
+        rigid_shoulder[side][:, 1] = lateral_sign * 0.5 * body_width
+        rigid_hip[side] = hip_center.copy()
+        rigid_hip[side][:, 1] = lateral_sign * 0.43 * body_width
+
     assign("pelvis", pelvis, ("left_hip", "right_hip"))
     assign(
         "pelvis_duplicate",
@@ -281,7 +300,7 @@ def lift_ap10k_monocular_to_dog27(
     assign("muzzle", world["nose"], ("nose",))
 
     for side in ("left", "right"):
-        shoulder = world[f"{side}_shoulder"]
+        shoulder = rigid_shoulder[side]
         elbow = world[f"{side}_elbow"]
         paw = world[f"{side}_front_paw"]
         assign(f"{side}_shoulder", shoulder, (f"{side}_shoulder",))
@@ -300,7 +319,7 @@ def lift_ap10k_monocular_to_dog27(
         )
         assign(f"{side}_front_toe", paw, (f"{side}_front_paw",))
 
-        hip = world[f"{side}_hip"]
+        hip = rigid_hip[side]
         knee = world[f"{side}_knee"]
         hind_paw = world[f"{side}_hind_paw"]
         assign(f"{side}_hip", hip, (f"{side}_hip",))
@@ -380,6 +399,8 @@ def lift_ap10k_monocular_to_dog27(
                     "confidence_threshold": confidence_threshold,
                     "pixels_per_meter": pixels_per_meter,
                 },
+                "lifting_algorithm": "side_view_rigid_torso_v2",
+                "root_orientation_mode": "shoulder_hip_axis",
             },
             "created_by": {"gqmr_version": __version__},
         },
