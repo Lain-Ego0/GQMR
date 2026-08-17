@@ -26,6 +26,17 @@ GUI 的“动作测试集”提供 8 个固定、可复现动作：慢速/标准
 
 “导入动作”支持标准 AnimalMotion NPZ、旧版 dog-27 TXT，以及已经标定到 GQMR 世界坐标系的 3D 通用 keypoint JSON/NPZ/CSV。DeepLabCut/SLEAP 的 2D CSV 与多目三角化可通过 `gqmr pose` 命令转换后导入。
 
+仅有单目侧视 AP-10K 2D 关键点时，可用实验性解剖深度先验跑通展示链路：
+
+```bash
+uv run gqmr pose lift-monocular input.2d.npz --format generic-npz \
+  --preprocess --output input.animal.npz
+```
+
+该命令要求大致侧视的狗，会将 AP-10K 17 点补全为 dog-27。深度和缺失关节来自解剖先验，仅用于预览和打通重定向工作流，不是真实三维动捕。
+
+GUI 的“狗视频动作提取”和“单目实验性 3D 提升”已包含同样的完整流程：可从视频提取或载入已有 NPZ/JSON/CSV，预览 2D 叠加，选择狗实例和朝向，调整躯干长度、身体宽度、平滑窗口与置信度阈值，并在生成 dog-27 后自动载入预览和机器人重定向。
+
 默认资产根目录是仓库根目录，完整模型位于 `GQMR/assets/<asset_id>/<commit>/`。如果机器人区域提示资产不可用，执行 `gqmr assets status`检查逐文件哈希。自定义位置使用 `--asset-root`；旧的 `--cache-dir` 参数仅作兼容别名保留。
 
 最短演示闭环：

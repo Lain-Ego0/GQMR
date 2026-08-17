@@ -12,7 +12,9 @@ from PySide6.QtCore import QThreadPool, QTimer, Qt
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QComboBox,
+    QDoubleSpinBox,
     QFileDialog,
     QFrame,
     QFormLayout,
@@ -26,6 +28,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSlider,
+    QSpinBox,
     QSplitter,
     QStatusBar,
     QTextEdit,
@@ -50,7 +53,11 @@ from gqmr.project import (
 )
 from gqmr.project.model import EditCommand
 from gqmr.plugins import run_pose_video_backend_plugin
-from gqmr.pose import discover_pose_backends, keypoint_batch_to_animal_motion
+from gqmr.pose import (
+    discover_pose_backends,
+    keypoint_batch_to_animal_motion,
+    lift_ap10k_monocular_to_dog27,
+)
 from gqmr.retarget import (
     AnimalPreprocessReport,
     diagnose_motion,
@@ -189,17 +196,76 @@ class MainWindow(QMainWindow):
         pose_config_row.addWidget(self.pose_config_edit, 1)
         pose_config_row.addWidget(self.pose_config_button)
         self.video_select_button = QPushButton("选择狗视频…")
+        self.video_pose_select_button = QPushButton("载入已有 2D…")
+        video_source_row = QHBoxLayout()
+        video_source_row.addWidget(self.video_select_button)
+        video_source_row.addWidget(self.video_pose_select_button)
         self.video_extract_button = QPushButton("提取 2D 关键点")
         self.video_extract_button.setObjectName("primaryButton")
+        self.video_pose_preview_button = QPushButton("预览 2D 叠加")
+        video_action_row = QHBoxLayout()
+        video_action_row.addWidget(self.video_extract_button)
+        video_action_row.addWidget(self.video_pose_preview_button)
         self.video_status = QLabel("尚未选择视频")
         self.video_status.setObjectName("sourceStatus")
         self.video_status.setWordWrap(True)
         video_layout.addRow("推理后端", self.pose_backend_combo)
         video_layout.addRow("模型配置", pose_config_row)
-        video_layout.addRow(self.video_select_button)
-        video_layout.addRow(self.video_extract_button)
+        video_layout.addRow(video_source_row)
+        video_layout.addRow(video_action_row)
         video_layout.addRow(self.video_status)
         controls_layout.addWidget(video_group)
+
+        lift_group = QGroupBox("单目实验性 3D 提升")
+        lift_layout = QFormLayout(lift_group)
+        lift_layout.setContentsMargins(14, 18, 14, 14)
+        lift_layout.setHorizontalSpacing(10)
+        lift_layout.setVerticalSpacing(8)
+        self.monocular_instance_combo = QComboBox()
+        self.monocular_instance_combo.setToolTip("选择 2D 检测结果中的狗")
+        self.monocular_facing_combo = QComboBox()
+        self.monocular_facing_combo.addItem("自动判断", "auto")
+        self.monocular_facing_combo.addItem("画面向左", "left")
+        self.monocular_facing_combo.addItem("画面向右", "right")
+        self.monocular_torso_length = QDoubleSpinBox()
+        self.monocular_torso_length.setRange(0.10, 2.00)
+        self.monocular_torso_length.setDecimals(3)
+        self.monocular_torso_length.setSingleStep(0.01)
+        self.monocular_torso_length.setValue(0.48)
+        self.monocular_torso_length.setSuffix(" m")
+        self.monocular_body_width = QDoubleSpinBox()
+        self.monocular_body_width.setRange(0.05, 0.80)
+        self.monocular_body_width.setDecimals(3)
+        self.monocular_body_width.setSingleStep(0.01)
+        self.monocular_body_width.setValue(0.28)
+        self.monocular_body_width.setSuffix(" m")
+        self.monocular_smoothing_window = QSpinBox()
+        self.monocular_smoothing_window.setRange(1, 99)
+        self.monocular_smoothing_window.setSingleStep(2)
+        self.monocular_smoothing_window.setValue(5)
+        self.monocular_smoothing_window.setSuffix(" 帧")
+        self.monocular_confidence_threshold = QDoubleSpinBox()
+        self.monocular_confidence_threshold.setRange(0.0, 1.0)
+        self.monocular_confidence_threshold.setDecimals(2)
+        self.monocular_confidence_threshold.setSingleStep(0.05)
+        self.monocular_confidence_threshold.setValue(0.15)
+        self.monocular_preprocess = QCheckBox("自动修复、平滑并估计地面接触")
+        self.monocular_preprocess.setChecked(True)
+        self.monocular_lift_button = QPushButton("生成并载入 3D 动作…")
+        self.monocular_lift_button.setObjectName("primaryButton")
+        self.monocular_status = QLabel("请先提取或载入 AP-10K 2D 关键点")
+        self.monocular_status.setObjectName("sourceStatus")
+        self.monocular_status.setWordWrap(True)
+        lift_layout.addRow("狗实例", self.monocular_instance_combo)
+        lift_layout.addRow("画面朝向", self.monocular_facing_combo)
+        lift_layout.addRow("躯干长度", self.monocular_torso_length)
+        lift_layout.addRow("身体宽度", self.monocular_body_width)
+        lift_layout.addRow("平滑窗口", self.monocular_smoothing_window)
+        lift_layout.addRow("置信度阈值", self.monocular_confidence_threshold)
+        lift_layout.addRow(self.monocular_preprocess)
+        lift_layout.addRow(self.monocular_lift_button)
+        lift_layout.addRow(self.monocular_status)
+        controls_layout.addWidget(lift_group)
 
         retarget_group = QGroupBox("机器人与求解")
         retarget_layout = QFormLayout(retarget_group)
@@ -330,7 +396,10 @@ class MainWindow(QMainWindow):
         self.import_button.clicked.connect(self.import_motion)
         self.pose_config_button.clicked.connect(self.select_pose_config)
         self.video_select_button.clicked.connect(self.select_dog_video)
+        self.video_pose_select_button.clicked.connect(self.select_video_pose_result)
         self.video_extract_button.clicked.connect(self.start_video_pose_extraction)
+        self.video_pose_preview_button.clicked.connect(self.preview_video_pose_result)
+        self.monocular_lift_button.clicked.connect(self.start_monocular_lift)
         self.retarget_button.clicked.connect(self.start_retarget)
         self.batch_button.clicked.connect(self.start_batch_evaluation)
         self.cancel_button.clicked.connect(self.cancel_task)
@@ -606,6 +675,7 @@ class MainWindow(QMainWindow):
         self.import_button.setEnabled(not busy)
         self.video_select_button.setEnabled(not busy)
         self.pose_config_button.setEnabled(not busy)
+        self.video_pose_select_button.setEnabled(not busy)
         self.pose_backend_combo.setEnabled(not busy)
         self.pose_config_edit.setEnabled(not busy)
         self.video_extract_button.setEnabled(
@@ -613,6 +683,26 @@ class MainWindow(QMainWindow):
             and self.video_pose_path is not None
             and self.pose_backend_combo.currentData() is not None
             and bool(self.pose_config_edit.text().strip())
+        )
+        self.video_pose_preview_button.setEnabled(
+            not busy
+            and self.video_pose_batch is not None
+            and self.video_pose_output is not None
+            and self.video_pose_path is not None
+            and self.video_pose_path.is_file()
+        )
+        self.monocular_instance_combo.setEnabled(not busy)
+        self.monocular_facing_combo.setEnabled(not busy)
+        self.monocular_torso_length.setEnabled(not busy)
+        self.monocular_body_width.setEnabled(not busy)
+        self.monocular_smoothing_window.setEnabled(not busy)
+        self.monocular_confidence_threshold.setEnabled(not busy)
+        self.monocular_preprocess.setEnabled(not busy)
+        self.monocular_lift_button.setEnabled(
+            not busy
+            and self.video_pose_batch is not None
+            and self.video_pose_batch.dimensions == 2
+            and self.monocular_instance_combo.currentData() is not None
         )
         self.retarget_button.setEnabled(self.animal_motion is not None and not busy)
         self.quality_button.setEnabled(self.robot_motion is not None and not busy)
@@ -748,10 +838,87 @@ class MainWindow(QMainWindow):
         self.video_pose_path = Path(filename)
         self.video_pose_output = None
         self.video_pose_batch = None
+        self.monocular_instance_combo.clear()
+        self.monocular_status.setText("等待从所选视频提取 2D 关键点")
         self.video_status.setText(
             f"{self.video_pose_path.name}\n已选择，等待 GPU 提取"
         )
         self._update_enabled()
+
+    def _set_video_pose_batch(self, batch, path: Path) -> None:
+        if batch.dimensions != 2:
+            raise ValueError("单目提升要求二维关键点")
+        if batch.coordinate_frame != "image_pixels_x_right_y_down":
+            raise ValueError("单目提升要求图像像素坐标系")
+        self.video_pose_batch = batch
+        self.video_pose_output = path
+        self.monocular_instance_combo.clear()
+        for instance_id in batch.instance_ids:
+            self.monocular_instance_combo.addItem(instance_id, instance_id)
+        source_video = batch.metadata.get("source_video", {})
+        if isinstance(source_video, dict):
+            candidate = source_video.get("path")
+            if isinstance(candidate, str) and Path(candidate).is_file():
+                self.video_pose_path = Path(candidate)
+        valid_ratio = float(batch.valid_mask.mean())
+        self.video_status.setText(
+            f"{path.name}\n{len(batch.timestamps)} 帧 · "
+            f"{len(batch.keypoint_names)} 点 · 有效率 {valid_ratio:.1%}"
+        )
+        self.monocular_status.setText(
+            f"2D 数据已就绪：{len(batch.instance_ids)} 个实例\n"
+            "请确认体型参数后生成实验性 3D 动作"
+        )
+        self._update_enabled()
+
+    def select_video_pose_result(self) -> None:
+        filename, _ = QFileDialog.getOpenFileName(
+            self,
+            "载入已有 2D 关键点",
+            str(self.video_pose_output or ""),
+            "2D keypoints (*.npz *.json *.csv);;All files (*)",
+        )
+        if not filename:
+            return
+        path = Path(filename)
+        try:
+            if path.suffix.lower() == ".npz":
+                batch = load_generic_keypoints_npz(path)
+            elif path.suffix.lower() == ".json":
+                batch = load_generic_keypoints_json(path)
+            elif path.suffix.lower() == ".csv":
+                batch = load_generic_keypoints_csv(path)
+            else:
+                raise ValueError("仅支持 .npz、.json 和 .csv 2D 关键点")
+            self._set_video_pose_batch(batch, path)
+            self._log(
+                {
+                    "loaded_2d_pose": str(path),
+                    "frames": len(batch.timestamps),
+                    "instances": list(batch.instance_ids),
+                    "keypoints": list(batch.keypoint_names),
+                    "valid_observation_ratio": float(batch.valid_mask.mean()),
+                }
+            )
+        except Exception as error:
+            QMessageBox.critical(self, "2D 关键点无效", str(error))
+
+    def preview_video_pose_result(self) -> None:
+        if (
+            self.video_pose_path is None
+            or self.video_pose_output is None
+            or self.video_pose_batch is None
+        ):
+            return
+        if not self.video_pose_path.is_file():
+            QMessageBox.critical(self, "无法预览", "2D 结果关联的原视频不存在")
+            return
+        VideoPosePreviewDialog(
+            self.video_pose_path,
+            self.video_pose_output,
+            self.video_pose_batch,
+            self,
+        ).exec()
 
     def _load_video_pose_config(self) -> dict:
         path = Path(self.pose_config_edit.text().strip())
@@ -796,13 +963,8 @@ class MainWindow(QMainWindow):
             return batch
 
         def complete(batch) -> None:
-            self.video_pose_batch = batch
-            self.video_pose_output = output_path
+            self._set_video_pose_batch(batch, output_path)
             valid_ratio = float(batch.valid_mask.mean())
-            self.video_status.setText(
-                f"{video_path.name}\n{len(batch.timestamps)} 帧 · "
-                f"{len(batch.keypoint_names)} 点 · 有效率 {valid_ratio:.1%}"
-            )
             self._log(
                 {
                     "video_pose": str(video_path),
@@ -812,7 +974,7 @@ class MainWindow(QMainWindow):
                     "dimensions": batch.dimensions,
                     "keypoints": list(batch.keypoint_names),
                     "valid_observation_ratio": valid_ratio,
-                    "next_step": "当前为 2D 结果，需时序 3D 提升后生成 DOG27。",
+                    "next_step": "点击“生成并载入 3D 动作”。",
                 }
             )
             VideoPosePreviewDialog(
@@ -822,6 +984,92 @@ class MainWindow(QMainWindow):
         def failed(text: str) -> None:
             self.video_status.setText(
                 f"{video_path.name}\n提取失败或已取消，请查看运行记录"
+            )
+            self._log(text)
+
+        self._run_task(work, complete, failed)
+
+    def start_monocular_lift(self) -> None:
+        if self.video_pose_batch is None or self.video_pose_output is None:
+            return
+        smoothing_window = self.monocular_smoothing_window.value()
+        if smoothing_window % 2 == 0:
+            QMessageBox.critical(self, "参数无效", "平滑窗口必须是正奇数")
+            return
+        input_path = self.video_pose_output
+        if input_path.name.endswith(".2d.npz"):
+            suggested_name = input_path.name.removesuffix(".2d.npz")
+        else:
+            suggested_name = input_path.stem
+        suggested = input_path.with_name(
+            f"{suggested_name}.experimental.animal.npz"
+        )
+        filename, _ = QFileDialog.getSaveFileName(
+            self,
+            "保存实验性 3D 动作",
+            str(suggested),
+            "AnimalMotion NPZ (*.npz)",
+        )
+        if not filename:
+            return
+        batch = self.video_pose_batch
+        output_path = Path(filename)
+        instance_id = str(self.monocular_instance_combo.currentData())
+        facing = str(self.monocular_facing_combo.currentData())
+        torso_length = self.monocular_torso_length.value()
+        body_width = self.monocular_body_width.value()
+        confidence_threshold = self.monocular_confidence_threshold.value()
+        should_preprocess = self.monocular_preprocess.isChecked()
+        self.monocular_status.setText(
+            "正在补全 dog-27 并估计伪 3D，可点击“停止任务”"
+        )
+
+        def work(token):
+            if token.cancelled:
+                return None
+            motion = lift_ap10k_monocular_to_dog27(
+                batch,
+                instance_id=instance_id,
+                facing=facing,
+                torso_length=torso_length,
+                body_width=body_width,
+                smoothing_window=smoothing_window,
+                confidence_threshold=confidence_threshold,
+            )
+            report = None
+            if should_preprocess:
+                motion, report = preprocess_animal_motion(motion)
+            if token.cancelled:
+                return None
+            save_motion(output_path, motion)
+            return motion, report
+
+        def complete(result) -> None:
+            if result is None:
+                return
+            motion, report = result
+            self.set_animal_motion(
+                motion, output_path, preprocess_report=report
+            )
+            self.monocular_status.setText(
+                f"{output_path.name}\n{motion.frame_count} 帧 dog-27 已生成并载入"
+            )
+            self._log(
+                {
+                    "experimental_monocular_lift": str(input_path),
+                    "output": str(output_path),
+                    "frames": motion.frame_count,
+                    "instance": instance_id,
+                    "parameters": motion.metadata["source"]["parameters"],
+                    "preprocess": report.summary() if report is not None else None,
+                    "warning": motion.metadata["source"]["warning"],
+                    "next_step": "选择机器人和求解模式，然后点击“开始重定向”。",
+                }
+            )
+
+        def failed(text: str) -> None:
+            self.monocular_status.setText(
+                "3D 动作生成失败或已取消，请查看运行记录"
             )
             self._log(text)
 

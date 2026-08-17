@@ -43,6 +43,7 @@ from gqmr.plugins import run_pose_video_backend_plugin
 from gqmr.pose import (
     discover_pose_backends,
     keypoint_batch_to_animal_motion,
+    lift_ap10k_monocular_to_dog27,
     triangulate_keypoints,
 )
 from gqmr.pose.api import PoseDataError
@@ -321,6 +322,26 @@ def build_parser() -> argparse.ArgumentParser:
     pose_convert.add_argument("--instance")
     pose_convert.add_argument("--preprocess", action="store_true")
     pose_convert.add_argument("--output", type=Path, required=True)
+    pose_lift = pose_commands.add_parser(
+        "lift-monocular",
+        help="experimentally lift side-view AP-10K 2D poses to dog-27",
+    )
+    pose_lift.add_argument("path", type=Path)
+    pose_lift.add_argument(
+        "--format",
+        choices=("generic-json", "generic-npz", "generic-csv"),
+        required=True,
+    )
+    pose_lift.add_argument("--instance")
+    pose_lift.add_argument(
+        "--facing", choices=("auto", "left", "right"), default="auto"
+    )
+    pose_lift.add_argument("--torso-length", type=float, default=0.48)
+    pose_lift.add_argument("--body-width", type=float, default=0.28)
+    pose_lift.add_argument("--smoothing-window", type=int, default=5)
+    pose_lift.add_argument("--confidence-threshold", type=float, default=0.15)
+    pose_lift.add_argument("--preprocess", action="store_true")
+    pose_lift.add_argument("--output", type=Path, required=True)
     pose_triangulate = pose_commands.add_parser("triangulate", help="triangulate synchronized generic 2D views")
     pose_triangulate.add_argument("paths", type=Path, nargs="+")
     pose_triangulate.add_argument("--camera-matrices", type=Path, required=True)
@@ -772,6 +793,30 @@ def _run_pose(args: argparse.Namespace) -> dict[str, object]:
             **_pose_summary(args.path, batch),
             "output": str(args.output),
             "schema_id": motion.schema_id,
+            "preprocess": preprocess_summary,
+        }
+    if args.pose_command == "lift-monocular":
+        batch = _load_pose_file(args.path, args.format)
+        motion = lift_ap10k_monocular_to_dog27(
+            batch,
+            instance_id=args.instance,
+            facing=args.facing,
+            torso_length=args.torso_length,
+            body_width=args.body_width,
+            smoothing_window=args.smoothing_window,
+            confidence_threshold=args.confidence_threshold,
+        )
+        preprocess_summary = None
+        if args.preprocess:
+            motion, report = preprocess_animal_motion(motion)
+            preprocess_summary = report.summary()
+        save_motion(args.output, motion)
+        return {
+            **_pose_summary(args.path, batch),
+            "output": str(args.output),
+            "schema_id": motion.schema_id,
+            "experimental": True,
+            "facing": motion.metadata["source"]["parameters"]["facing"],
             "preprocess": preprocess_summary,
         }
     views = [load_generic_keypoints_json(path) for path in args.paths]

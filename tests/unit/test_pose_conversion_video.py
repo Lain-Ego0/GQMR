@@ -5,7 +5,11 @@ from pathlib import Path
 import av
 import numpy as np
 
-from gqmr.pose import KeypointBatch, keypoint_batch_to_animal_motion
+from gqmr.pose import (
+    KeypointBatch,
+    keypoint_batch_to_animal_motion,
+    lift_ap10k_monocular_to_dog27,
+)
 from gqmr.pose.api import PoseBackendInfo, PoseDataError
 from gqmr.pose.video_inference import infer_video_with_backend
 from gqmr.skeletons import get_skeleton
@@ -79,6 +83,74 @@ def test_keypoint_batch_to_animal_motion() -> None:
     assert motion.timestamps.tolist() == [0.0, 0.09999999999999964, 0.1999999999999993]
     assert motion.keypoint_names == skeleton.names
     assert motion.metadata["source"]["instance_id"] == "dog"
+
+
+def test_lift_ap10k_monocular_to_dog27() -> None:
+    names = (
+        "L_Eye",
+        "R_Eye",
+        "Nose",
+        "Neck",
+        "Root of tail",
+        "L_Shoulder",
+        "L_Elbow",
+        "L_F_Paw",
+        "R_Shoulder",
+        "R_Elbow",
+        "R_F_Paw",
+        "L_Hip",
+        "L_Knee",
+        "L_B_Paw",
+        "R_Hip",
+        "R_Knee",
+        "R_B_Paw",
+    )
+    frame = np.array(
+        [
+            [85, 55],
+            [88, 57],
+            [70, 65],
+            [120, 90],
+            [300, 100],
+            [130, 105],
+            [145, 145],
+            [155, 190],
+            [135, 108],
+            [155, 150],
+            [175, 190],
+            [270, 110],
+            [260, 150],
+            [245, 190],
+            [275, 112],
+            [290, 155],
+            [305, 190],
+        ],
+        dtype=np.float32,
+    )
+    positions = np.stack((frame, frame + [2, 0], frame + [4, 0]))[:, None]
+    batch = KeypointBatch(
+        timestamps=[3.0, 3.1, 3.2],
+        keypoint_names=names,
+        instance_ids=("dog",),
+        positions=positions,
+        confidence=np.ones((3, 1, len(names))),
+        valid_mask=np.ones((3, 1, len(names)), dtype=bool),
+        coordinate_frame="image_pixels_x_right_y_down",
+        metadata={"fixture": True},
+    )
+
+    motion = lift_ap10k_monocular_to_dog27(batch, smoothing_window=1)
+    skeleton = get_skeleton("dog-27")
+
+    assert motion.positions.shape == (3, 27, 3)
+    assert motion.keypoint_names == skeleton.names
+    assert motion.timestamps.tolist() == [0.0, 0.10000000000000009, 0.20000000000000018]
+    assert np.all(np.isfinite(motion.positions))
+    assert np.all(motion.frame_valid)
+    assert motion.metadata["source"]["format"] == (
+        "experimental_monocular_ap10k_lift_v1"
+    )
+    assert motion.metadata["source"]["parameters"]["facing"] == "left"
 
 
 def test_pyav_video_pts_and_keypoint_alignment(tmp_path: Path) -> None:

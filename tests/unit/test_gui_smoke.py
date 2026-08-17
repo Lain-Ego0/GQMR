@@ -2,18 +2,75 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from types import SimpleNamespace
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("MUJOCO_GL", "egl")
 
-from PySide6.QtWidgets import QApplication
+import numpy as np
+from PySide6.QtWidgets import QApplication, QFileDialog
 
 from gqmr.assets import default_asset_root
 from gqmr.core.io import load_motion
-from gqmr.pose.api import PoseBackendInfo
+from gqmr.pose.api import KeypointBatch, PoseBackendInfo
 from gqmr.synthetic import available_motion_presets, generate_dog27_motion
 from gqmr.ui import app as app_module
 from gqmr.ui.app import MainWindow
+
+
+def _make_ap10k_batch() -> KeypointBatch:
+    names = (
+        "L_Eye",
+        "R_Eye",
+        "Nose",
+        "Neck",
+        "Root of tail",
+        "L_Shoulder",
+        "L_Elbow",
+        "L_F_Paw",
+        "R_Shoulder",
+        "R_Elbow",
+        "R_F_Paw",
+        "L_Hip",
+        "L_Knee",
+        "L_B_Paw",
+        "R_Hip",
+        "R_Knee",
+        "R_B_Paw",
+    )
+    frame = np.array(
+        [
+            [85, 55],
+            [88, 57],
+            [70, 65],
+            [120, 90],
+            [300, 100],
+            [130, 105],
+            [145, 145],
+            [155, 190],
+            [135, 108],
+            [155, 150],
+            [175, 190],
+            [270, 110],
+            [260, 150],
+            [245, 190],
+            [275, 112],
+            [290, 155],
+            [305, 190],
+        ],
+        dtype=np.float32,
+    )
+    positions = np.stack((frame, frame + [2, 0], frame + [4, 0]))[:, None]
+    return KeypointBatch(
+        timestamps=[0.0, 0.1, 0.2],
+        keypoint_names=names,
+        instance_ids=("dog-0",),
+        positions=positions,
+        confidence=np.ones((3, 1, len(names))),
+        valid_mask=np.ones((3, 1, len(names)), dtype=bool),
+        coordinate_frame="image_pixels_x_right_y_down",
+        metadata={"fixture": True},
+    )
 
 
 def test_gui_window_and_preview_smoke() -> None:
@@ -86,6 +143,51 @@ def test_gui_exposes_installed_dog_video_pose_backend(monkeypatch) -> None:
     window._update_enabled()
     assert window.video_extract_button.isEnabled()
     assert "2D" in window.video_extract_button.text()
+    window.close()
+
+
+def test_gui_monocular_lift_generates_and_loads_animal_motion(
+    tmp_path: Path, monkeypatch
+) -> None:
+    application = QApplication.instance() or QApplication([])
+    window = MainWindow()
+    batch = _make_ap10k_batch()
+    source = tmp_path / "dog.2d.npz"
+    output = tmp_path / "dog.experimental.animal.npz"
+    window._set_video_pose_batch(batch, source)
+    window.monocular_preprocess.setChecked(False)
+
+    assert window.monocular_lift_button.isEnabled()
+    assert window.monocular_instance_combo.currentData() == "dog-0"
+    assert window.monocular_facing_combo.currentData() == "auto"
+    assert window.monocular_torso_length.value() == 0.48
+    assert window.monocular_body_width.value() == 0.28
+
+    monkeypatch.setattr(
+        QFileDialog,
+        "getSaveFileName",
+        lambda *args, **kwargs: (str(output), "NPZ (*.npz)"),
+    )
+
+    def run_immediately(function, success, failure=None) -> None:
+        try:
+            success(function(SimpleNamespace(cancelled=False)))
+        except Exception as error:
+            if failure is not None:
+                failure(str(error))
+            raise
+
+    window._run_task = run_immediately
+    window.start_monocular_lift()
+
+    assert output.is_file()
+    assert window.animal_motion is not None
+    assert window.animal_motion.metadata["source"]["format"] == (
+        "experimental_monocular_ap10k_lift_v1"
+    )
+    assert window.animal_path == output
+    assert window.retarget_button.isEnabled()
+    assert "dog-27" in window.monocular_status.text()
     window.close()
 
 
